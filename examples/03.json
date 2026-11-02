@@ -1,0 +1,18 @@
+{
+  "company_id": "company_1",
+  "client_id": "client_1",
+  "period": {
+    "from": "2026-11-01T18:00:00+03:00",
+    "to": "2026-11-02T09:00:00+03:00"
+  },
+  "messages": [
+    {
+      "id": "salary_1",
+      "conversation_id": "salary_chat_1",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:00:00+03:00",
+      "sender_role": "client",
+      "text": "Проверьте зарплату Иванова: в расчёте 45000 рублей, а согласовали 50000. Нужен ответ завтра до 11:00."
+    }
+  ]
+}

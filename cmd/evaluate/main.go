@@ -18,7 +18,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: go run ./cmd/evaluate examples/01.json [examples/02.json]")
+		return fmt.Errorf("usage: go run ./cmd/evaluate examples/01.json [examples/02.json examples/03.json]")
 	}
 	base := os.Getenv("OLLAMA_BASE_URL")
 	if base == "" {

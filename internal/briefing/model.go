@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const PromptVersion = "morning-v1"
+const PromptVersion = "morning-v2"
 const SchemaVersion = "topics-v1"
 const MaxBody = 1 << 20
 const QueueLimit = 100

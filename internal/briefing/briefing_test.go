@@ -279,7 +279,7 @@ func TestInputLimitsAndChronology(t *testing.T) {
 	}
 }
 func TestExamplesFitBudget(t *testing.T) {
-	for _, name := range []string{"01.json", "02.json"} {
+	for _, name := range []string{"01.json", "02.json", "03.json"} {
 		b, e := os.ReadFile(filepath.Join("..", "..", "examples", name))
 		if e != nil {
 			t.Fatal(e)
