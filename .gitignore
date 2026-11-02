@@ -1,0 +1,10 @@
+.env
+data/
+bin/
+*.db
+*.db-shm
+*.db-wal
+*.lock
+*.exe
+.postman/
+.idea/

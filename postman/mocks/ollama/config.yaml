@@ -1,0 +1,15 @@
+version: 1
+id: 0b2bc580-a92d-4b63-86e4-2541a7c6fa17
+name: Ollama chat subset mock
+slug: ollama-chat-subset-mock
+protocol: http
+interceptRequests: true
+port: 4500
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
+generatedFrom:
+  type: spec
+  mode: static
+  path: ../../specs/ollama-subset.openapi.json

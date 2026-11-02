@@ -1,0 +1,39 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Ollama chat subset mock",
+    "version": "1"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:11434"
+    }
+  ],
+  "paths": {
+    "/api/chat": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Controlled fixture, not a model prediction",
+            "content": {
+              "application/json": {
+                "example": {
+                  "done": true,
+                  "done_reason": "stop",
+                  "message": {
+                    "role": "assistant",
+                    "content": "{\"topics\":[{\"text\":\"Проверить документы\",\"status\":\"awaiting_staff\",\"deadline_text\":null,\"needs_context\":false,\"source_message_ids\":[\"m1\"]}]}"
+                  },
+                  "total_duration": 1000000,
+                  "load_duration": 0,
+                  "prompt_eval_count": 42,
+                  "eval_count": 15
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

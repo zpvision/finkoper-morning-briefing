@@ -1,0 +1,23 @@
+[Unit]
+Description=FinKoper Morning Briefing
+After=network.target
+
+[Service]
+Type=simple
+User=finkoper-briefing
+Group=finkoper-briefing
+WorkingDirectory=/opt/finkoper-briefing
+EnvironmentFile=/etc/finkoper-briefing.env
+ExecStart=/opt/finkoper-briefing/briefing
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/finkoper-briefing
+
+[Install]
+WantedBy=multi-user.target
