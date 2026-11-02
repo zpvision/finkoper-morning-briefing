@@ -9,6 +9,8 @@ bin/
 .postman/
 .idea/
 /qwen3-show.json
+/qwen3-14b-show.json
+/ollama-tags.json
 /context_budget.py
 /qwen3-tokenizer.tar.gz
 /.venv-budget/

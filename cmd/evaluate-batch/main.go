@@ -1,4 +1,4 @@
-// Offline plan unless the operator explicitly supplies --run.
+// Offline plan unless --check-profile or --run explicitly permits HTTP.
 package main
 
 import (
@@ -31,10 +31,20 @@ func run(args []string, stdout io.Writer) error {
 	execute := flags.Bool("run", false, "enable sequential generations without retries")
 	split := flags.String("split", "development", "development or holdout; holdout only for final evaluation")
 	mode := flags.String("mode", "think-false", "think-false or think-true")
+	profile := flags.String("profile", evaluation.Profile8B, "explicit diagnostic profile")
+	profileResources := flags.String("profile-resources", "", "separate 14B resource directory; never changes 8B configuration")
+	check := flags.Bool("check-profile", false, "explicit network permission: metadata and exact render-only, no generation")
+	probe := flags.Bool("probe", false, "select only the first development case; --run enables one generation")
 	root := flags.String("dataset", "evaluation", "synthetic dataset directory")
 	out := flags.String("out", "", "JSONL file; --run default evaluation/reports/<timestamp>.jsonl")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || (*mode != "think-false" && *mode != "think-true") {
 		return errors.New("invalid_batch_arguments")
+	}
+	if (*check && *execute) || (*probe && *split != "development") {
+		return errors.New("invalid_batch_check_or_probe")
+	}
+	if *profile != evaluation.Profile8B && *profile != evaluation.Profile14B {
+		return errors.New("unknown_diagnostic_profile")
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
 		return errors.New("batch_report_requires_jsonl")
@@ -43,12 +53,15 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if *probe {
+		dataset.Cases = dataset.Cases[:1]
+	}
 	counter, err := briefing.NewPythonCounter()
 	if err != nil {
 		return err
 	}
-	if counter.Model != "qwen3:8b" {
-		return errors.New("batch_model_requires_separate_tokenizer_template_budget_validation")
+	if err := evaluation.ConfigureProfile(counter, *profile, *profileResources, *mode, *split); err != nil {
+		return err
 	}
 	raw, err := os.ReadFile(filepath.Join(counter.Resources, "manifest.json"))
 	if err != nil || len(raw) > briefing.MaxBody {
@@ -66,6 +79,7 @@ func run(args []string, stdout io.Writer) error {
 		counter.DiagnosticThinking = true
 		runner = diagnostic.NewThinkingRunner(counter.BaseURL, counter)
 	}
+	runner.VerifyOnly = *check
 	output := stdout
 	var reportFile *os.File
 	if *execute && *out == "" {

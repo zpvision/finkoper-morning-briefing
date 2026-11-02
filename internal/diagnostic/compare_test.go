@@ -23,6 +23,58 @@ type spyCounter struct {
 	counts, verifies int
 }
 
+func TestVerifyOnly14BDoesNotGenerate(t *testing.T) {
+	for _, mode := range []string{"ok", "missing", "mismatch", "verify_failure"} {
+		t.Run(mode, func(t *testing.T) {
+			counter := &spyCounter{fail: mode == "verify_failure"}
+			renders := 0
+			generations := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var p struct {
+					Debug    bool `json:"_debug_render_only"`
+					Model    string
+					Think    bool
+					Messages []struct{ Content string }
+					Format   json.RawMessage
+				}
+				json.NewDecoder(r.Body).Decode(&p)
+				if p.Model != "qwen3:14b-q4_K_M" || p.Think || string(p.Format) != briefing.OutputSchema {
+					t.Error("profile payload")
+				}
+				if !p.Debug {
+					generations++
+					t.Error("check generated")
+					return
+				}
+				renders++
+				if mode == "missing" {
+					json.NewEncoder(w).Encode(map[string]any{})
+					return
+				}
+				rendered := ExpectedRender(p.Messages[0].Content, p.Messages[1].Content)
+				if mode == "mismatch" {
+					rendered += " "
+				}
+				json.NewEncoder(w).Encode(map[string]any{"_debug_info": map[string]string{"rendered_template": rendered}})
+			}))
+			defer server.Close()
+			runner := NewRunner(server.URL, "qwen3:14b-q4_K_M", time.Second, counter)
+			runner.VerifyOnly = true
+			record := runner.Compare(context.Background(), "input", example(t), Variants()[0], false)
+			if record.Mode != "check" || record.GenerationAttempts != 0 || generations != 0 {
+				t.Fatal("generation in check")
+			}
+			if mode == "ok" {
+				if Failed(record) || !record.Budget.Verified || renders != 1 {
+					t.Fatal("check failed")
+				}
+			} else if !Failed(record) || record.Budget.Verified {
+				t.Fatal("check did not fail closed")
+			}
+		})
+	}
+}
+
 func (c *spyCounter) Count(_ context.Context, s, u string) (briefing.Budget, error) {
 	c.system, c.user = s, u
 	c.counts++

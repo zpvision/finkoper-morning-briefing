@@ -78,6 +78,7 @@ type Runner struct {
 	Client         *http.Client
 	Counter        briefing.BudgetCounter
 	Thinking       bool
+	VerifyOnly     bool // Explicit diagnostic check: render and metadata, no generation.
 }
 
 func NewRunner(base, model string, timeout time.Duration, counter briefing.BudgetCounter) *Runner {
@@ -168,6 +169,9 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	if run {
 		mode = "run"
 	}
+	if r.VerifyOnly {
+		mode = "check"
+	}
 	out = Record{File: file, Variant: v.Name, Mode: mode, PromptVersion: v.PromptVersion, PromptHash: Hash(v.Prompt), UserHash: Hash(user), MessagesHash: Hash(string(msgRaw)), FormatHash: Hash(string(v.Format)), RequestHash: Hash(string(raw)), SystemBytes: len(v.Prompt), UserBytes: len(user), Format: format, Model: r.Model, Parameters: params}
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
@@ -205,7 +209,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure("input_budget_exceeded")
 		return
 	}
-	if !run {
+	if !run && !r.VerifyOnly {
 		return
 	}
 	verifyStart := time.Now()
@@ -236,6 +240,9 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		return
 	}
 	out.Budget.Verified = true
+	if r.VerifyOnly {
+		return
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/api/chat", bytes.NewReader(raw))
 	if err != nil {
 		failure("diagnostic_request_failed")

@@ -1,0 +1,23 @@
+{
+  "repository": "Qwen/Qwen3-8B",
+  "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "files": {
+    "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101"
+  },
+  "ollama_template_sha256": "ae370d884f108d16e7cc8fd5259ebc5773a0afa6e078b11f4ed7e39a27e0dfc4",
+  "model_digest": "bdbd181c33f2ed1b31c972991882db3cf4d192569092138a7d29e973cd9debe8",
+  "source_model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+  "model_name": "qwen3:14b-q4_K_M",
+  "diagnostic_profile": "qwen3-14b-q4-k-m-v1",
+  "compatibility_evidence": {
+    "tokenizer_metadata_sha256": "cedb9b127c808acac86ff28de8f3637a02412c93921238514666fad30466357c",
+    "vocabulary_entries": 151936,
+    "bpe_vocabulary_entries": 151643,
+    "merges": 151387,
+    "added_tokens": 26,
+    "added_tokens_sha256": "96a12ca156d84f1ba18fa3876f9b06604786dbd28670e53042d19a45293ca4d2",
+    "all_exported_tokenizer_fields_equal": true,
+    "templates_byte_equal": true
+  }
+}

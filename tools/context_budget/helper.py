@@ -22,6 +22,8 @@ TOKENIZERS_VERSION = "0.22.1"
 MAX_INPUT = 2 * 1024 * 1024
 MAX_RESPONSE = 8 * 1024 * 1024
 METHOD = "qwen3_tokenizers_ollama_template_no_normalization"
+DIAGNOSTIC_PROFILE = "qwen3-14b-q4-k-m-v1"
+DIAGNOSTIC_MANIFEST_SHA256 = "dc5b73c3845a1fdf043f3055a98b3b0399831dc27592d8f995db034f929489be"
 
 
 class BudgetError(Exception):
@@ -33,12 +35,13 @@ def digest(data):
 
 
 class ContextBudget:
-    def __init__(self, directory, thinking=False):
+    def __init__(self, directory, thinking=False, diagnostic_profile=None):
         self.directory = Path(directory)
         self.manifest = None
         self.tokenizer = None
         self.thinking = thinking
         self.output_reserve = 4096 if thinking else 1500
+        self.diagnostic_profile = diagnostic_profile
 
     def load(self):
         if self.tokenizer is not None:
@@ -47,7 +50,15 @@ class ContextBudget:
             raise BudgetError("budget_python_requires_venv")
         if importlib.metadata.version("tokenizers") != TOKENIZERS_VERSION:
             raise BudgetError("tokenizers_version_mismatch")
-        manifest = json.loads((self.directory / "manifest.json").read_bytes())
+        manifest_raw = (self.directory / "manifest.json").read_bytes()
+        manifest = json.loads(manifest_raw)
+        if self.diagnostic_profile is not None:
+            if (self.diagnostic_profile != DIAGNOSTIC_PROFILE or self.thinking
+                    or manifest.get("diagnostic_profile") != DIAGNOSTIC_PROFILE
+                    or digest(manifest_raw) != DIAGNOSTIC_MANIFEST_SHA256):
+                raise BudgetError("invalid_tokenizer_manifest")
+        elif manifest.get("diagnostic_profile") is not None:
+            raise BudgetError("invalid_tokenizer_manifest")
         if (manifest.get("repository") != "Qwen/Qwen3-8B"
                 or not re.fullmatch(r"[a-f0-9]{40}", manifest.get("revision", ""))
                 or not re.fullmatch(r"[a-f0-9]{64}", manifest.get("model_digest", ""))
@@ -84,6 +95,8 @@ class ContextBudget:
 
     def verify(self, base_url, model, system, user, http_timeout=5, output_schema=None):
         self.load()
+        if self.diagnostic_profile and model != self.manifest["model_name"]:
+            raise BudgetError("context_tokenizer_model_not_validated")
         parsed = urllib.parse.urlsplit(base_url)
         if (parsed.scheme not in ("http", "https") or not parsed.netloc
                 or parsed.username or parsed.password or parsed.query or parsed.fragment):
@@ -153,6 +166,7 @@ def main():
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
     parser.add_argument("--http-timeout", type=float, default=5)
     parser.add_argument("--thinking", action="store_true", help="diagnostic only: think=true, reserve=4096")
+    parser.add_argument("--diagnostic-profile", choices=(DIAGNOSTIC_PROFILE,))
     args = parser.parse_args()
     try:
         if not 0 < args.http_timeout <= 120:
@@ -168,7 +182,7 @@ def main():
                 or any(not isinstance(v, str) for k, v in request.items() if k != "format")
                 or ("format" in expected and not isinstance(request["format"], dict))):
             raise BudgetError("budget_helper_invalid_request")
-        counter = ContextBudget(args.resources, thinking=args.thinking)
+        counter = ContextBudget(args.resources, thinking=args.thinking, diagnostic_profile=args.diagnostic_profile)
         if args.mode == "count":
             result = counter.count(request["system"], request["user"])
         else:

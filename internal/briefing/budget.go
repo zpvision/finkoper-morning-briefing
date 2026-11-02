@@ -59,6 +59,7 @@ type PythonCounter struct {
 	Timeout                                   time.Duration
 	// Explicit diagnostic-only opt-in; never set by service configuration.
 	DiagnosticThinking bool
+	DiagnosticProfile  string // Explicit CLI-only profile, never set by service configuration.
 	slot               chan struct{}
 	verified           atomic.Bool
 }
@@ -129,6 +130,9 @@ func (p *PythonCounter) invoke(ctx context.Context, mode string, request any, ou
 	args := []string{"-I", p.Script, "--resources", p.Resources, "--mode", mode, "--http-timeout", strconv.FormatFloat(p.Timeout.Seconds(), 'f', 3, 64)}
 	if p.DiagnosticThinking {
 		args = append(args, "--thinking")
+	}
+	if p.DiagnosticProfile != "" {
+		args = append(args, "--diagnostic-profile", p.DiagnosticProfile)
 	}
 	cmd := exec.CommandContext(ctx, p.Python, args...)
 	cmd.WaitDelay = time.Second

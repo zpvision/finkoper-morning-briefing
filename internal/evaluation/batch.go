@@ -76,6 +76,8 @@ func Load(root, split string) (Dataset, error) {
 
 type Report struct {
 	diagnostic.Record
+	DiagnosticProfile     string    `json:"diagnostic_profile"`
+	SelectedExamples      int       `json:"selected_examples"`
 	ThinkingMode          string    `json:"thinking_mode"`
 	CallTimeoutMS         int64     `json:"call_timeout_ms"`
 	ExampleID             string    `json:"example_id"`
@@ -115,6 +117,11 @@ func Run(ctx context.Context, dataset Dataset, runner *diagnostic.Runner, digest
 			report.ThinkingMode = "think-true"
 		}
 		report.CallTimeoutMS = runner.Client.Timeout.Milliseconds()
+		report.DiagnosticProfile = Profile8B
+		if runner.Model == Model14B {
+			report.DiagnosticProfile = Profile14B
+		}
+		report.SelectedExamples = len(dataset.Cases)
 		if record.Budget.Verified {
 			report.ModelDigest = &digest
 		}
