@@ -1,6 +1,6 @@
 # Утренний обзор FinKoper
 
-[Диагностика «кто написал и что хотел»](docs/summary-diagnostics.md): отдельная схема summary-v1, 8B/think=false, резерв 1000. Рабочий API не переключается. По умолчанию — план без сети.
+[Диагностика «кто написал и что хотел»](docs/summary-diagnostics.md): промпт diagnostic-summary-v2, схема summary-v1, 8B/think=false, резерв 1000. По умолчанию — development и план без сети; holdout выбирается явно. Рабочий API не переключается.
 
 [Отдельные входные файлы на 14B](docs/standalone-14b-files.md): `diagnose-files` с явным профилем, планом без сети и одним вызовом на файл только с --run. Файлы не включаются в development/holdout.
 

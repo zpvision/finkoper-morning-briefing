@@ -43,10 +43,10 @@ type report struct {
 
 func run(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("diagnose-summary", flag.ContinueOnError)
-	set := flags.String("set", "examples", "examples or development only")
+	set := flags.String("set", "development", "development (default), holdout (explicit final evaluation), or examples")
 	execute := flags.Bool("run", false, "explicitly enable one generation per client, sequentially, no retries")
 	out := flags.String("out", "", "new .jsonl report; default stdout")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || (*set != "examples" && *set != "development") {
+	if flags.Parse(args) != nil || flags.NArg() != 0 || (*set != "examples" && *set != "development" && *set != "holdout") {
 		return errors.New("invalid_summary_arguments")
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
@@ -55,8 +55,8 @@ func run(args []string, output io.Writer) error {
 	paths := []string{"examples/04-exact-20.json", "examples/02.json"}
 	var dataset evaluation.Dataset
 	var err error
-	if *set == "development" {
-		dataset, err = evaluation.Load("evaluation", "development")
+	if *set != "examples" {
+		dataset, err = evaluation.Load("evaluation", *set)
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func run(args []string, output io.Writer) error {
 		}
 		record := runner.Summarize(ctx, input.File, input.Input, *execute)
 		entry := report{Record: record, SchemaVersion: diagnostic.SummarySchemaVersion, InputScope: *set, InputFileHash: input.Hash, ExpectedModelDigest: metadata.Digest, TokenizerManifestHash: diagnostic.Hash(string(raw)), RecordedAt: time.Now().UTC()}
-		if *set == "development" {
+		if *set != "examples" {
 			entry.DatasetVersion = dataset.Version
 			entry.DatasetHash = dataset.ManifestHash
 			entry.ExampleID = dataset.Cases[i].ID

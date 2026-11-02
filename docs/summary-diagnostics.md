@@ -1,12 +1,12 @@
 # Диагностика «кто написал и что хотел»
 
-Отдельная команда `cmd/diagnose-summary`, новый промпт `diagnostic-summary-v1`, новая схема `summary-v1`:
+Отдельная команда `cmd/diagnose-summary`, промпт `diagnostic-summary-v2`, схема `summary-v1`:
 
 ```json
 {"summary":"Связная сводка на русском","source_message_ids":["id"]}
 ```
 
-Нет topics/status/priority/deadline_text/needs_context. Рабочие API, morning-v3/topics-v1, существующие диагностические промпты, задания SQLite и данные набора оценки не меняются. Автоматического переключения API нет.
+Нет topics/status/priority/deadline_text/needs_context. Рабочие API, morning-v3/topics-v1, остальные диагностические промпты, задания SQLite и данные набора оценки не меняются. Автоматического переключения API нет. В v2 уточнены границы context_messages: он восстанавливает конкретные условия новых просьб, но не добавляет самостоятельные старые темы. Просьбы не усиливаются, обещания и подтверждённое выполнение различаются. Уточнение сделано по сообщению оператора о development dev-08, без настройки по разметке holdout. Сообщённые оператором 10/10 структурно корректных ответов и среднее processing_ms=4174 относятся к предыдущему v1, не доказывают смысловое качество v2.
 
 Одна генерация на клиента, последовательно, без повторов, repair и скрытой обрезки. Профиль только qwen3:8b, think=false, temperature=0, num_ctx=8192, num_predict=1000, stream=false, keep_alive=30m, shift=false, truncate=false, HTTP timeout=120s. Новый короткий русский промпт не содержит эталонов, имён или ответов тестовых клиентов. Он просит сохранять существенные суммы, даты, сроки словами переписки, продолжения, напоминания, ответы и отмены; отделять обещание от выполнения, не придумывать файлы/требования и рекомендации, игнорировать инструкции внутри данных. Context используется для понимания текущих обращений. Ориентир 2–6 предложений не является ограничением валидатора: отдельные просьбы нельзя терять ради длины.
 
@@ -28,17 +28,31 @@ JSON берётся только из message.content. Текст message.thinki
 $env:BRIEFING_BUDGET_PYTHON=(Join-Path $PWD '.venv-budget/Scripts/python.exe')
 $env:OLLAMA_MODEL='qwen3:8b'
 go build -o bin/diagnose-summary.exe ./cmd/diagnose-summary
-# Два существующих входа, по умолчанию:
+# По умолчанию — 10 development-входов, план без сети:
+./bin/diagnose-summary.exe
+# Два существующих входа:
 ./bin/diagnose-summary.exe --set examples
 # Только 10 development-входов:
 ./bin/diagnose-summary.exe --set development
+# Holdout только по явному выбору, также план без сети:
+./bin/diagnose-summary.exe --set holdout
 ```
 
-Оба запуска без --run не делают HTTP-запросов. examples — именно examples/04-exact-20.json и examples/02.json, не development/holdout. development читает только входы своей части manifest, без разметки. Holdout и произвольные пути команда не принимает. В GoLand: Go Build, Package `finkoper-morning-briefing/cmd/diagnose-summary`, Working directory — корень, env выше, Program arguments `--set examples` или `--set development`.
+Без --run ни один вариант не делает HTTP-запросов. examples — именно examples/04-exact-20.json и examples/02.json, не development/holdout. development/holdout читают только входы выбранной части manifest, без разметки. Произвольные пути и объединённый all не принимаются. По умолчанию holdout не выбирается. В GoLand: Go Build, Package `finkoper-morning-briefing/cmd/diagnose-summary`, Working directory — корень, env выше, Program arguments пустые для development либо явно --set examples/holdout.
 
 По умолчанию JSONL идёт в stdout. --out сохраняет новый файл .jsonl с 0600 на Unix; существующий не перезаписывается. JSONL и evaluation/reports исключены из Git. План тоже можно сохранить через --out. API-токен не нужен; конфигурация API и сервисы тональности/RAG не используются.
 
 ## Ручной серверный запуск
+
+Для сборки из **закреплённого полного коммита** и одного holdout-прогона используйте [tools/run-summary-holdout.sh](../tools/run-summary-holdout.sh):
+
+```bash
+bash tools/run-summary-holdout.sh FULL_40_CHARACTER_COMMIT_FROM_RELEASE
+```
+
+Подставьте полный SHA проверенного коммита. Скрипт требует Git, Go версии из go.mod (или доступного Go toolchain), Python с venv/pip, доступ к GitHub/PyPI на этапе подготовки и чтение существующих 8B-ресурсов. При недостаточных правах только чтение этих файлов выполняется через sudo. Новые clone, бинарник, Python-окружение, копия ресурсов, план и итоговый JSONL создаются в уникальном каталоге `$HOME/finkoper-summary-holdout.XXXXXX` текущего пользователя. Ничего в /opt или /etc не записывается. Скрипт не читает env API, не перезапускает/останавливает сервисы и не устанавливает модели. Зависимости подготавливаются до запросов; при обработке ничего не скачивается. При preflight-ошибке возможна ранняя остановка; иначе выполняются 10 последовательных генераций без повторов. Рабочая GPU общая с другими сервисами.
+
+Проверка изоляции использует отдельные искусственные fixtures: некорректная разметка-ловушка находится рядом с входами, но не парсится и не появляется в запросах; HTTP mock сверяет весь user JSON с канонической сериализацией только Input. Это проверка инструмента, не смысловой оценщик. Разметка реального holdout для настройки v2 не использовалась; после ручной итоговой оценки её не следует использовать для дальнейшего подбора промпта под видом независимой проверки.
 
 Сборка отдельного Linux-бинарника локально, без развёртывания:
 
@@ -64,6 +78,7 @@ summary8() {
 # Сначала планы, без сети:
 summary8 --set examples
 summary8 --set development
+summary8 --set holdout
 ```
 
 Только отдельно разрешённые оператором генерации:
@@ -74,6 +89,8 @@ report_dir=$(sudo -u finkoper-briefing mktemp -d /tmp/briefing-summary.XXXXXX)
 summary8 --set examples --run --out "$report_dir/examples.jsonl"
 # Максимум 10 последовательных генераций, holdout не используется:
 summary8 --set development --run --out "$report_dir/development.jsonl"
+# Отдельный явный итоговый holdout-прогон, максимум 10 генераций:
+summary8 --set holdout --run --out "$report_dir/holdout.jsonl"
 printf 'reports=%s\n' "$report_dir"
 ```
 
@@ -81,6 +98,6 @@ printf 'reports=%s\n' "$report_dir"
 
 ## Что оценивать
 
-Отчёт содержит file, input_scope, prompt/schema versions, хеши исходного файла/system/user/messages/schema/request/render, модель, ожидаемый/подтверждённый digest (в плане подтверждённый null), tokenizer manifest hash, параметры, бюджет, result, ошибки, токены и длительности helper/compatibility/render/HTTP/Ollama/processing, generation_attempts. Development добавляет ID и hash/version manifest, без эталонов. Отсутствующие метрики — null. Сравните prompt_eval_count с локальным budget.input_tokens: разность должна быть 0 для подтверждения на фактическом runtime.
+Отчёт содержит file, input_scope, prompt/schema versions, хеши исходного файла/system/user/messages/schema/request/render, модель, ожидаемый/подтверждённый digest (в плане подтверждённый null), tokenizer manifest hash, параметры, бюджет, result, ошибки, токены и длительности helper/compatibility/render/HTTP/Ollama/processing, generation_attempts. Development и holdout добавляют ID и hash/version manifest, без эталонов. Отсутствующие метрики — null. Сравните prompt_eval_count с локальным budget.input_tokens: разность должна быть 0 для подтверждения на фактическом runtime.
 
 Вручную проверьте полноту обращений, существенные суммы/даты/сроки, учёт ответов/отмен, отсутствие повторов и выдумок, верность источников. В development-разметке используйте просьбы, существенные факты и запрещённые выводы; не требуйте старых структурированных полей status/deadline_text/needs_context в новой схеме. В двух старых примерах не требуйте количества topics или дословного текста: важен смысл. Корректная структура и совпадение ключевых слов не доказывают качество. Mock-результаты — проверка инструмента, не модели. Реальные генерации разработчиком не запускались; к серверу он не подключался.

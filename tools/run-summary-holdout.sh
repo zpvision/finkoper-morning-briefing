@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Manual operator command only. Builds/runs in a new directory under the caller's HOME.
+set -euo pipefail
+umask 077
+commit=${1:?Usage: bash tools/run-summary-holdout.sh FULL_40_CHARACTER_COMMIT}
+[[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { printf 'Expected full commit SHA\n' >&2; exit 2; }
+for command_name in git go python3; do command -v "$command_name" >/dev/null; done
+work=$(mktemp -d "$HOME/finkoper-summary-holdout.XXXXXX")
+git clone --no-checkout https://github.com/zpvision/finkoper-morning-briefing.git "$work/src"
+git -C "$work/src" checkout --detach "$commit"
+test "$(git -C "$work/src" rev-parse HEAD)" = "$commit"
+cd "$work/src"
+GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)" CGO_ENABLED=0 go build -o "$work/diagnose-summary" ./cmd/diagnose-summary
+python3 -m venv "$work/venv"
+"$work/venv/bin/python" -m pip --disable-pip-version-check install --only-binary=:all: --no-deps -r tools/context_budget/requirements.txt
+mkdir "$work/tokenizer"
+resource_source=/opt/finkoper-morning-briefing/resources/tokenizer/qwen3-8b
+for name in manifest.json tokenizer.json tokenizer_config.json; do
+  if [ -r "$resource_source/$name" ]; then
+    cat -- "$resource_source/$name" > "$work/tokenizer/$name"
+  else
+    sudo cat -- "$resource_source/$name" > "$work/tokenizer/$name"
+  fi
+done
+summary_holdout() {
+  env BRIEFING_BUDGET_PYTHON="$work/venv/bin/python" \
+    BRIEFING_BUDGET_HELPER="$work/src/tools/context_budget/helper.py" \
+    BRIEFING_TOKENIZER_DIR="$work/tokenizer" BRIEFING_BUDGET_TIMEOUT=60s \
+    OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=qwen3:8b \
+    "$work/diagnose-summary" --set holdout "$@"
+}
+# Offline validation first; no generation and no HTTP.
+summary_holdout --out "$work/holdout-plan.jsonl"
+# One manual run, ten sequential clients at most. No retries.
+status=0
+summary_holdout --run --out "$work/holdout.jsonl" || status=$?
+printf 'commit=%s\nreport=%s\nexit=%s\n' "$commit" "$work/holdout.jsonl" "$status"
+exit "$status"

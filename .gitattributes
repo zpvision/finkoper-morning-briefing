@@ -1,1 +1,2 @@
 internal/evaluation/profiles/*.json text eol=lf
+tools/run-summary-holdout.sh text eol=lf
