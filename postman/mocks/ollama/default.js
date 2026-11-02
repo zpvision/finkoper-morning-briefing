@@ -11,8 +11,12 @@ function handle(req,res,body) {
  if(req.method==='POST' && path==='/api/chat') {
    if(!body || !Array.isArray(body.messages) || body.messages.length!==2 || body.think!==false || body.truncate!==false || body.shift!==false) return send(res,400,{error:'fixture_contract_mismatch'});
    if(body._debug_render_only===true) return send(res,200,{_debug_info:{rendered_template:render(body.messages[0].content,body.messages[1].content)}});
-   let id='m1'; try {id=JSON.parse(body.messages[1].content).messages[0].id;} catch {}
-   const result={topics:[{text:'Проверить документы',status:'awaiting_staff',deadline_text:null,needs_context:false,source_message_ids:[id]}]};
+   let input={messages:[{id:'m1'}]}; try {const parsed=JSON.parse(body.messages[1].content);input=parsed.original_input || parsed;} catch {}
+   const id=input.messages[0].id;
+   const grouping=body.format && typeof body.format==='object' && body.format.properties && body.format.properties.issues;
+   const result=grouping
+     ? {issues:[{message_ids:[id],context_message_ids:[],request:'Контролируемая группировка для проверки обмена',deadline_message_id:null,staff_reply_ids:[],resolution_confirmation_ids:[],missing_information:[]}]}
+     : {topics:[{text:'Проверить документы',status:'awaiting_staff',deadline_text:null,needs_context:false,source_message_ids:[id]}]};
    return send(res,200,{done:true,done_reason:'stop',message:{role:'assistant',content:JSON.stringify(result)},total_duration:1000000,load_duration:0,prompt_eval_count:42,eval_count:15});
  }
  send(res,501,{error:'Endpoint not defined'});

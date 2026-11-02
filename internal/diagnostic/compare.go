@@ -93,8 +93,11 @@ func safeHelperError(err error, fallback string) string {
 
 func (r *Runner) renderCheck(ctx context.Context, payload map[string]any) (string, error) {
 	payload["_debug_render_only"] = true
-	raw, _ := json.Marshal(payload)
+	raw, marshalErr := json.Marshal(payload)
 	delete(payload, "_debug_render_only")
+	if marshalErr != nil {
+		return "", errors.New("diagnostic_format_invalid")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/api/chat", bytes.NewReader(raw))
 	if err != nil {
 		return "", errors.New("diagnostic_render_request_failed")
@@ -127,14 +130,20 @@ func (r *Runner) renderCheck(ctx context.Context, payload map[string]any) (strin
 // Verify is the existing helper's full version/digest/template/exact-render check.
 func (r *Runner) Compare(ctx context.Context, file string, in briefing.Input, v Variant, run bool) (out Record) {
 	_, user := briefing.PromptInput(in)
+	return r.execute(ctx, file, v, user, run, func(raw []byte) error { _, err := briefing.ValidateResult(raw, in); return err })
+}
+
+// Shared diagnostic transport only: callers supply the exact user string and output validator.
+// The production service does not import this package.
+func (r *Runner) execute(ctx context.Context, file string, v Variant, user string, run bool, validate func([]byte) error) (out Record) {
 	messages := []map[string]string{{"role": "system", "content": v.Prompt}, {"role": "user", "content": user}}
 	msgRaw, _ := json.Marshal(messages)
 	options := map[string]any{"temperature": 0, "num_ctx": briefing.ContextTokens, "num_predict": briefing.OutputReserve}
 	params := map[string]any{"stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "options": options}
 	payload := map[string]any{"model": r.Model, "stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "options": options, "messages": messages, "format": v.Format}
-	raw, _ := json.Marshal(payload)
+	raw, marshalErr := json.Marshal(payload)
 	format := "json"
-	if v.Name == "A" {
+	if len(v.Format) > 0 && v.Format[0] == '{' {
 		format = "schema"
 	}
 	mode := "plan"
@@ -145,6 +154,10 @@ func (r *Runner) Compare(ctx context.Context, file string, in briefing.Input, v 
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
+	if marshalErr != nil {
+		failure("diagnostic_format_invalid")
+		return
+	}
 	if r.Counter == nil {
 		failure("budget_counter_not_configured")
 		return
@@ -267,9 +280,10 @@ func (r *Runner) Compare(ctx context.Context, file string, in briefing.Input, v 
 	} else {
 		out.InvalidContent = &envelope.Message.Content
 	}
-	if _, err = briefing.ValidateResult(content, in); err != nil {
+	if err = validate(content); err != nil {
 		code := "invalid_model_result"
-		if err.Error() == "invalid_model_sources" {
+		switch err.Error() {
+		case "invalid_model_sources", "invalid_grouping_structure", "invalid_grouping_sources", "invalid_grouping_roles":
 			code = err.Error()
 		}
 		out.StructuralError = &code
