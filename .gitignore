@@ -14,3 +14,4 @@ bin/
 /.venv-budget/
 /resources/tokenizer/
 __pycache__/
+diagnostic-*.jsonl
