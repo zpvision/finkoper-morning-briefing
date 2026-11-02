@@ -14,10 +14,15 @@ import (
 type Ollama struct {
 	BaseURL, Model string
 	Client         *http.Client
+	Counter        BudgetCounter
 }
 
-func NewOllama(base, model string, timeout time.Duration) *Ollama {
-	return &Ollama{strings.TrimRight(base, "/"), model, &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+func NewOllama(base, model string, timeout time.Duration, counters ...BudgetCounter) *Ollama {
+	var counter BudgetCounter
+	if len(counters) > 0 {
+		counter = counters[0]
+	}
+	return &Ollama{BaseURL: strings.TrimRight(base, "/"), Model: model, Client: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, Counter: counter}
 }
 func millis(p *int64) *float64 {
 	if p == nil {
@@ -28,10 +33,14 @@ func millis(p *int64) *float64 {
 }
 func (o *Ollama) Generate(ctx context.Context, in Input) (*Result, Metrics, error) {
 	var m Metrics
-	if err := CheckBudget(in); err != nil {
+	system, user := PromptInput(in)
+	if _, err := checkBudget(ctx, o.Counter, system, user); err != nil {
 		return nil, m, err
 	}
-	payload := map[string]any{"model": o.Model, "stream": false, "think": false, "truncate": false, "keep_alive": "30m", "format": json.RawMessage(OutputSchema), "options": map[string]any{"temperature": 0, "num_ctx": 8192, "num_predict": 1500}, "messages": []map[string]string{{"role": "system", "content": SystemPrompt}, {"role": "user", "content": string(userData(in))}}}
+	if err := o.Counter.Verify(ctx, system, user); err != nil {
+		return nil, m, err
+	}
+	payload := map[string]any{"model": o.Model, "stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "format": json.RawMessage(OutputSchema), "options": map[string]any{"temperature": 0, "num_ctx": ContextTokens, "num_predict": OutputReserve}, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}}}
 	b, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/api/chat", bytes.NewReader(b))
 	if err != nil {

@@ -36,7 +36,13 @@ func run() error {
 			return fmt.Errorf("invalid OLLAMA_TIMEOUT")
 		}
 	}
-	o := briefing.NewOllama(base, model, timeout)
+	counter, err := briefing.NewPythonCounter()
+	if err != nil {
+		return err
+	}
+	counter.BaseURL = base
+	counter.Model = model
+	o := briefing.NewOllama(base, model, timeout, counter)
 	for _, path := range os.Args[1:] {
 		b, err := os.ReadFile(path)
 		if err != nil {

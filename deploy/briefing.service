@@ -6,18 +6,20 @@ After=network.target
 Type=simple
 User=finkoper-briefing
 Group=finkoper-briefing
-WorkingDirectory=/opt/finkoper-briefing
-EnvironmentFile=/etc/finkoper-briefing.env
-ExecStart=/opt/finkoper-briefing/briefing
+WorkingDirectory=/opt/finkoper-morning-briefing/current
+EnvironmentFile=/etc/finkoper-morning-briefing.env
+ExecStart=/opt/finkoper-morning-briefing/current/briefing
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
+# Set BRIEFING_BUDGET_PYTHON=/opt/finkoper-morning-briefing/venv-budget/bin/python
+# in EnvironmentFile. Venv and tokenizer resources are owned by root, read-only here.
 UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/finkoper-briefing
+ReadWritePaths=/var/lib/finkoper-morning-briefing
 
 [Install]
 WantedBy=multi-user.target

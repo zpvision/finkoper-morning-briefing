@@ -8,3 +8,9 @@ bin/
 *.exe
 .postman/
 .idea/
+/qwen3-show.json
+/context_budget.py
+/qwen3-tokenizer.tar.gz
+/.venv-budget/
+/resources/tokenizer/
+__pycache__/

@@ -25,6 +25,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	counter, err := briefing.NewPythonCounter()
+	if err != nil {
+		return err
+	}
+	probeSystem, probeUser := briefing.SyntheticProbe()
+	if err = counter.Verify(context.Background(), probeSystem, probeUser); err != nil {
+		return err
+	}
 	store, err := briefing.Open(cfg.DB)
 	if err != nil {
 		return errors.New("cannot open or lock database")
@@ -38,10 +46,10 @@ func run() error {
 	defer stop()
 	workerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := &http.Server{Handler: briefing.Handler(store, cfg.Token), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	srv := &http.Server{Handler: briefing.Handler(store, cfg.Token, counter), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: counter.Timeout + 5*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	workerDone := make(chan error, 1)
 	go func() {
-		workerDone <- briefing.Run(workerCtx, store, briefing.NewOllama(cfg.BaseURL, cfg.Model, cfg.Timeout))
+		workerDone <- briefing.Run(workerCtx, store, briefing.NewOllama(cfg.BaseURL, cfg.Model, cfg.Timeout, counter))
 	}()
 	serverDone := make(chan error, 1)
 	go func() { serverDone <- srv.Serve(listener) }()

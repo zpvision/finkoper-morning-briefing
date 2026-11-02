@@ -6,7 +6,7 @@
 
 ## Локальный запуск (PowerShell / терминал GoLand)
 
-Нужен Go **1.27.1** (версия в go.mod). `modernc.org/sqlite` и `gofrs/flock` закреплены в go.mod/go.sum; CGO не нужен. Из корня проекта:
+Нужен Go **1.27.1** (версия в go.mod), Python 3.10+ и отдельное venv для счётчика. `modernc.org/sqlite` и `gofrs/flock` закреплены в go.mod/go.sum; CGO не нужен. Подготовьте Python/ресурсы по [инструкции счётчика](tools/context_budget/README.md). Из корня проекта:
 
 ```powershell
 $env:CGO_ENABLED='0'
@@ -31,11 +31,14 @@ $env:BRIEFING_API_TOKEN=[Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToSt
 $env:OLLAMA_BASE_URL='http://127.0.0.1:11435'
 $env:OLLAMA_MODEL='qwen3:8b'
 $env:OLLAMA_TIMEOUT='120s'
+$env:BRIEFING_BUDGET_PYTHON=(Join-Path $PWD '.venv-budget/Scripts/python.exe')
+$env:BRIEFING_BUDGET_HELPER=(Join-Path $PWD 'tools/context_budget/helper.py')
+$env:BRIEFING_TOKENIZER_DIR=(Join-Path $PWD 'resources/tokenizer/qwen3-8b')
 go run ./cmd/briefing
 # Или после сборки: .\bin\briefing.exe
 ```
 
-В GoLand: Go Build configuration, Run kind = Package, Package path = `finkoper-morning-briefing/cmd/briefing`, Working directory = корень проекта; задать эти шесть переменных в Environment. Токен задаётся локально, конфигурацию с секретом не сохранять как shared. Приложение само `.env` не читает; `.env.example` — шаблон переменных.
+В GoLand: Go Build configuration, Run kind = Package, Package path = `finkoper-morning-briefing/cmd/briefing`, Working directory = корень проекта; задать переменные из команды выше в Environment (BRIEFING_BUDGET_PYTHON — абсолютный путь к отдельному venv). Токен задаётся локально, конфигурацию с секретом не сохранять как shared. Приложение само `.env` не читает; `.env.example` — шаблон переменных. До открытия HTTP listener сервис проверяет совместимость с Ollama на искусственном Unicode-примере в режиме render-only. Если сервер недоступен или совместимость не подтверждена, запуск прекращается; fallback к байтам или генерации отсутствует.
 
 Умолчания: `127.0.0.1:18084`, `data/briefing.db`, `http://127.0.0.1:11434`, `qwen3:8b`, `120s`. `BRIEFING_API_TOKEN` обязателен; без него запуск прекращается. `OLLAMA_TIMEOUT` — положительная Go duration на один HTTP-вызов. Ollama не открывать в интернет.
 
@@ -67,15 +70,25 @@ curl.exe -sS "http://127.0.0.1:18084/v1/briefings/${jobId}?company_id=company_1"
 
 Поиск всегда по `(company_id, job_id)`; чужая компания получает 404. Ответ содержит `job_id`, `status`, `created_at`, `prompt_version`, `schema_version`, `result`, `error`, `metrics`. `result` — объект `topics` только при успехе; иначе null. `error` — безопасный код, без сырого ответа модели. Статусы: queued/running/succeeded/failed. При `failed` backend решает, нужен ли новый запрос с новым ключом.
 
-Ошибки: 400 — JSON/валидация/отсутствующий ключ или company_id; 401 — токен; 409 — конфликт ключа; 413 — HTTP body; 422 — бюджет модели; 429 + `Retry-After: 5` — очередь; 500 — хранилище. Очередь ограничена 100 **незавершёнными** заданиями (queued + running). Готовые результаты не входят в этот лимит. Размер хранилища растёт: политику хранения и удаления для production нужно определить отдельно.
+Ошибки: 400 — JSON/валидация/отсутствующий ключ или company_id; 401 — токен; 409 — конфликт ключа; 413 — HTTP body; 422 — бюджет модели; 429 + `Retry-After: 5` — очередь; 500 — хранилище; 503 — счётчик недоступен, таймаут или совместимость не подтверждена. Очередь ограничена 100 **незавершёнными** заданиями (queued + running). Готовые результаты не входят в этот лимит. Размер хранилища растёт: политику хранения и удаления для production нужно определить отдельно.
 
 ## Валидация и модель
 
 Вход не обрезается. Body ≤ 1 MiB; максимум 200 сообщений суммарно с контекстом; text непустой, ≤ 16000 UTF-8 байт; строковые ID непустые, ≤128 байт. Уникальность message ID проверяется между обоими массивами. Только роли client/staff и каналы email/max/telegram/finchat. Даты RFC3339 с часовым поясом; from < to; messages внутри [from,to), context_messages строго до from. Перед моделью каждый массив отдельно стабильно сортируется по времени: равные времена сохраняют исходный порядок. В user JSON контекст и период явно размечены разными полями.
 
-Отдельная **консервативная оценка, не точный токенизатор**: число UTF-8 байт системного промпта + сериализованного отсортированного user JSON + 512 условных токенов на шаблон + 1500 резерв ответа ≤8192. Для byte-level BPE это намеренно жёсткая оценка; для других токенизаторов/шаблонов строгой математической гарантии нет. Она отклонит часть входов, которые фактически поместились бы в контекст. Body limit не является лимитом контекста модели. При смене модели нужно заново проверить совместимость бюджета. JSON schema передаётся как `format`, а не добавляется текстом в промпт.
+Подсчёт выполняется локальным Python-helper на `tokenizers==0.22.1`, адаптированным из предоставленного context_budget.py; собственного BPE нет. Он работает на CPU, читает только локальные файлы токенизатора, не загружает веса и ничего не скачивает при обработке. Нормализация, padding и truncation отключены. Считается весь отрендеренный промпт для ровно system+user, think=false: системный промпт + **тот же** отсортированный сериализованный user JSON, который идёт в генерацию, специальные токены, /no_think и assistant prefix. Правило допуска: `input_tokens + 1500 <= 8192`. Байтовой оценки и деления на коэффициент больше нет. Body limit не является лимитом контекста. JSON schema передаётся как `format`, не добавляется текстом в промпт.
 
-Вызов native `POST /api/chat`: model=qwen3:8b (настраивается), stream=false, think=false, keep_alive=30m, temperature=0, num_ctx=8192, num_predict=1500, `format`=JSON Schema, `truncate=false`. Последний параметр присутствует в [актуальном контракте Ollama](https://github.com/ollama/ollama/blob/main/api/types.go); [chat handler](https://github.com/ollama/ollama/blob/main/server/routes.go) передаёт его в подготовку контекста. Версия установленной серверной Ollama **не проверялась**. Старые версии могут игнорировать поле; сервис не считает его подтверждением отсутствия обрезки и всегда применяет свой бюджет. Перед production необходимо проверить установленную версию, поддержку structured outputs/think/truncate и поведение на границе контекста. Нестандартных endpoint для токенизации или probing с генерацией нет.
+При запуске и перед каждой генерацией проверяются SHA-256 tokenizer.json/tokenizer_config.json, digest модели, версия Ollama **0.40.5**, хеш шаблона и побайтовое совпадение `_debug_info.rendered_template` от `_debug_render_only=true`. Это нестандартная возможность данного сервера; если поля нет или рендеринг отличается, возвращается понятный код ошибки, повтор обычной генерацией не выполняется. Проверяется только think=false. Изменение модели/версии/ресурсов требует явного повторного подтверждения. Проверка render-only обращается к Ollama и может загрузить её runner; сама токенизация локальна. Без успешной проверки рабочий сервис не объявляет совместимость. До запуска операторской команды на реальной Ollama локальные результаты имеют `compatibility_verified=false`; mock подтверждает логику проверки, не реальный сервер и не смысловое качество модели. Остаточный риск смены модели между проверкой и генерацией остаётся: модель/ресурсы должны быть неизменяемы во время работы.
+
+При 422 ответ содержит только код, безопасные счётчики и метод, например:
+
+```json
+{"error":"input_budget_exceeded","input_tokens":7000,"output_reserve":1500,"context_tokens":8192,"required_tokens":8500,"remaining_tokens":-308,"method":"qwen3_tokenizers_ollama_template_no_normalization","compatibility_verified":true}
+```
+
+Go запускает Python напрямую через exec.CommandContext, передаёт JSON через stdin и читает ограниченный stdout, без shell и без текстов переписки в argv, логах и сообщениях ошибок. Python работает с `-I`, backend-токен не наследуется. Один subprocess одновременно на сервис; `BRIEFING_BUDGET_TIMEOUT` (по умолчанию 30s, максимум 2m) включает ожидание своей очереди. Таймаут/поломка helper не разрешают задание. Уже принятое идемпотентное задание возвращается без вызова helper.
+
+Вызов native `POST /api/chat`: model=qwen3:8b (только совместимый с manifest digest), stream=false, think=false, keep_alive=30m, temperature=0, num_ctx=8192, num_predict=1500, `format`=JSON Schema, `truncate=false`, `shift=false`. Эти поля присутствуют в [контракте Ollama 0.40.5](https://github.com/ollama/ollama/blob/v0.40.5/api/types.go). Нестандартный render-only probe используется только для проверки рендеринга; endpoint токенизации Ollama не предполагается. Установка версии сообщена пользователем; в этой локальной работе к ней не подключались. Перед обновлением сервиса оператор должен выполнить отдельную проверку из инструкции.
 
 Промпт и схема находятся в `internal/briefing/prompt.go`, версии `morning-v2` и `topics-v1` сохраняются с каждым заданием. При изменении текста повышайте версии; queued задания неизвестной версии завершаются `unsupported_job_version`, а не выполняются другим промптом. Модель получает правила против инструкций из переписок; это снижает, но не устраняет риск prompt injection и смысловых ошибок. В `morning-v2` поле text требует содержательной сводки с предметом просьбы и причиной обращения: существенными суммами, расхождениями и именами. Краткость не должна удалять эти данные; отсутствующие сведения добавлять нельзя. Схема API не менялась.
 
@@ -98,15 +111,16 @@ go vet ./...
 $env:CGO_ENABLED='0'
 go build -o bin/briefing.exe ./cmd/briefing
 go build -o bin/evaluate.exe ./cmd/evaluate
+go build -o bin/budget.exe ./cmd/budget
 ```
 
-Обычные тесты используют httptest HTTP mock Ollama и временную SQLite, к AI-серверу не обращаются. Они проверяют auth, контекст, гонку идемпотентности/конфликт, tenant isolation, переполнение очереди, блокировку второго экземпляра, восстановление, один активный вызов, ошибки модели, ссылки, бюджет и размер body.
+Обычные тесты используют httptest HTTP mock Ollama, тестовый счётчик и временную SQLite, к AI-серверу не обращаются. Они проверяют auth, контекст, гонку идемпотентности/конфликт, tenant isolation, переполнение очереди, блокировку второго экземпляра, восстановление, один активный вызов, ошибки модели, ссылки, диагностику бюджета и размер body. Дополнительные локальные тесты с настоящим Python/tokenizers и loopback HTTP mock описаны в инструкции счётчика; они отдельно проверяют реальные counts примеров, переполнение, stdin/stdout, таймаут и совпадение проверенных строк с генерацией.
 
 Ручная команда **действительно вызывает Ollama**, один вызов на файл, без повторов и эталонной подстановки; запускается пользователем при открытом туннеле:
 
 ```powershell
 $env:OLLAMA_BASE_URL='http://127.0.0.1:11435'
-go run ./cmd/evaluate examples/01.json examples/02.json examples/03.json
+go run ./cmd/evaluate examples/01.json examples/02.json examples/03.json examples/04-exact-20.json
 ```
 
 Проверьте самостоятельно:
@@ -115,13 +129,15 @@ go run ./cmd/evaluate examples/01.json examples/02.json examples/03.json
 * `02.json`: две темы; отпуск awaiting_staff, needs_context=false, согласованный порядок (заявление+приказ, расчёт у кадровика) и обещание сотрудника без заявления о выполнении; акт resolved с подтверждением клиента из другого канала. Смену банка не включать.
 * `03.json`: одна тема awaiting_staff, needs_context=false, источник salary_1; deadline_text «завтра до 11:00». Ожидаемый смысл text: «Клиент просит проверить зарплату Иванова: в расчёте 45000 рублей, согласовано 50000». Допустима другая формулировка, но обязательны Иванов, просьба проверить зарплату и обе суммы с их ролями. Одно название «Проверка зарплаты Иванова» недостаточно. Не придумывать причину расхождения или сведения о выполнении, которых нет в сообщении.
 
-Эталоны описаны только для ручного сравнения; код не заменяет ими ответ. Mock-тесты подтверждают работу приложения с заданными ответами, **не качество модели**. TestExamplesFitBudget проверяет только валидность входных примеров и бюджет. По сообщению пользователя первый реальный прогон выявил потерю сумм в text; улучшение качества после изменения промпта требует повторной ручной оценки на реальной Ollama. В рамках этой доработки к серверу не подключались и реальную модель не вызывали.
+`04-exact-20.json` — полный исходный тест пользователя: test_company/test_without_context, max_1…max_20, max_test, 21:00…21:19 +03:00. Содержательные ожидания те же, что у 01.json. Локальный подсчёт с morning-v2: 01.json — 1848, 02.json — 1122, 04-exact-20.json — 1827 входных токенов; у каждого дополнительно резерв 1500. Это результаты подготовленного локального токенизатора, без подтверждения фактического серверного рендеринга.
+
+Эталоны описаны только для ручного сравнения; код не заменяет ими ответ. Mock-тесты подтверждают работу приложения с заданными ответами, **не качество модели**. TestExamplesValid проверяет валидность входных примеров; TestRealLocalTokenizer — локальный подсчёт и бюджет. По сообщению пользователя первый реальный прогон выявил потерю сумм в text; улучшение качества после изменения промпта требует повторной ручной оценки на реальной Ollama. В рамках этой доработки к серверу не подключались и реальную модель не вызывали.
 
 Postman локальные артефакты и дополнительный прогон описаны в [postman/README.md](postman/README.md). Использован skill [postman:api-engineer](postman/skills/api-engineer/SKILL.md). Облачная workspace не создавалась, ничего не публиковалось.
 
 ## Будущий запуск на сервере
 
-[deploy/briefing.service](deploy/briefing.service) — только пример, **не установлен**. Для него отдельно подготовить пользователя, бинарник `/opt/finkoper-briefing/briefing`, каталог `/var/lib/finkoper-briefing`, env-файл `/etc/finkoper-briefing.env` с правами 0600. В env задать DB_PATH=/var/lib/finkoper-briefing/briefing.db, listen=127.0.0.1:18084, OLLAMA_BASE_URL=http://127.0.0.1:11434 и секрет. Linux-сборка из PowerShell:
+[deploy/briefing.service](deploy/briefing.service) — локальный пример под указанную установку, **автоматически не устанавливался**. Пользователь и группа — `finkoper-briefing`, бинарник — `/opt/finkoper-morning-briefing/current/briefing`, рабочий каталог — `/opt/finkoper-morning-briefing/current`, env-файл — `/etc/finkoper-morning-briefing.env` с правами 0600. Каталог БД `/var/lib/finkoper-morning-briefing` должен быть доступен на запись пользователю сервиса. В env задать `BRIEFING_DB_PATH=/var/lib/finkoper-morning-briefing/briefing.db`, `BRIEFING_LISTEN_ADDR=127.0.0.1:18084`, `OLLAMA_BASE_URL=http://127.0.0.1:11434` и `BRIEFING_API_TOKEN`. Linux-сборка из PowerShell:
 
 ```powershell
 $env:GOOS='linux'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'

@@ -100,6 +100,20 @@ func scanJob(row interface{ Scan(...any) error }) (Job, error) {
 
 const fields = "id,status,created,prompt_version,schema_version,result,error,metrics"
 
+func (s *Store) Lookup(ctx context.Context, in Input, key string) (Job, error) {
+	raw, _ := json.Marshal(in)
+	sum := sha256.Sum256(raw)
+	var id, hash string
+	err := s.db.QueryRowContext(ctx, "SELECT id,hash FROM jobs WHERE company=? AND idem=?", in.CompanyID, key).Scan(&id, &hash)
+	if err != nil {
+		return Job{}, err
+	}
+	if hash != hex.EncodeToString(sum[:]) {
+		return Job{}, ErrConflict
+	}
+	return s.Get(ctx, in.CompanyID, id)
+}
+
 func (s *Store) Get(ctx context.Context, company, id string) (Job, error) {
 	return scanJob(s.db.QueryRowContext(ctx, "SELECT "+fields+" FROM jobs WHERE company=? AND id=?", company, id))
 }

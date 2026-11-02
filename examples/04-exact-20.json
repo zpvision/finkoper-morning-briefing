@@ -1,0 +1,171 @@
+{
+  "company_id": "test_company",
+  "client_id": "test_without_context",
+  "period": {
+    "from": "2026-11-01T18:00:00+03:00",
+    "to": "2026-11-02T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "max_1",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:00:00+03:00",
+      "sender_role": "client",
+      "text": "Добрый вечер!"
+    },
+    {
+      "id": "max_2",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:01:00+03:00",
+      "sender_role": "client",
+      "text": "Отправил документы за октябрь."
+    },
+    {
+      "id": "max_3",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:02:00+03:00",
+      "sender_role": "client",
+      "text": "Посмотрите, пожалуйста, всё ли хватает."
+    },
+    {
+      "id": "max_4",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:03:00+03:00",
+      "sender_role": "client",
+      "text": "По ООО Вектор пока нет акта."
+    },
+    {
+      "id": "max_5",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:04:00+03:00",
+      "sender_role": "client",
+      "text": "Они обещали прислать завтра."
+    },
+    {
+      "id": "max_6",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:05:00+03:00",
+      "sender_role": "client",
+      "text": "Ещё вопрос по зарплате Иванова."
+    },
+    {
+      "id": "max_7",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:06:00+03:00",
+      "sender_role": "client",
+      "text": "В расчёте стоит 45000 рублей."
+    },
+    {
+      "id": "max_8",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:07:00+03:00",
+      "sender_role": "client",
+      "text": "А мы согласовали 50000."
+    },
+    {
+      "id": "max_9",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:08:00+03:00",
+      "sender_role": "client",
+      "text": "Проверьте, пожалуйста, почему так."
+    },
+    {
+      "id": "max_10",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:09:00+03:00",
+      "sender_role": "client",
+      "text": "Нужен ответ завтра до 11:00."
+    },
+    {
+      "id": "max_11",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:10:00+03:00",
+      "sender_role": "client",
+      "text": "И ещё пришло требование из налоговой."
+    },
+    {
+      "id": "max_12",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:11:00+03:00",
+      "sender_role": "client",
+      "text": "Сам документ пока не отправляю."
+    },
+    {
+      "id": "max_13",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:12:00+03:00",
+      "sender_role": "client",
+      "text": "Утром пришлю скан."
+    },
+    {
+      "id": "max_14",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:13:00+03:00",
+      "sender_role": "client",
+      "text": "Подскажите потом, что с ним делать."
+    },
+    {
+      "id": "max_15",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:14:00+03:00",
+      "sender_role": "client",
+      "text": "По акту сверки с Альфой вопрос снимаю."
+    },
+    {
+      "id": "max_16",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:15:00+03:00",
+      "sender_role": "client",
+      "text": "Они нашли оплату."
+    },
+    {
+      "id": "max_17",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:16:00+03:00",
+      "sender_role": "client",
+      "text": "Там всё сошлось."
+    },
+    {
+      "id": "max_18",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:17:00+03:00",
+      "sender_role": "client",
+      "text": "А по отпуску сделайте как в прошлый раз."
+    },
+    {
+      "id": "max_19",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:18:00+03:00",
+      "sender_role": "client",
+      "text": "Спасибо!"
+    },
+    {
+      "id": "max_20",
+      "conversation_id": "max_test",
+      "channel": "max",
+      "sent_at": "2026-11-01T21:19:00+03:00",
+      "sender_role": "client",
+      "text": "Главное — не забудьте проверить зарплату."
+    }
+  ]
+}

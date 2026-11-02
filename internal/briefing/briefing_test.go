@@ -44,7 +44,7 @@ func request(h http.Handler, method, path, key string, b []byte, auth bool) *htt
 func TestHTTPIdempotencyAndTenancy(t *testing.T) {
 	s := store(t)
 	s.limit = 1
-	h := Handler(s, "secret")
+	h := Handler(s, "secret", testCounter{})
 	in := sample()
 	b, _ := json.Marshal(in)
 	for _, p := range []string{"/v1/briefings", "/v1/briefings/x?company_id=c"} {
@@ -103,7 +103,7 @@ func TestHTTPIdempotencyAndTenancy(t *testing.T) {
 }
 func TestOptionalContext(t *testing.T) {
 	s := store(t)
-	h := Handler(s, "secret")
+	h := Handler(s, "secret", testCounter{})
 	b, _ := json.Marshal(sample())
 	var obj map[string]any
 	_ = json.Unmarshal(b, &obj)
@@ -189,7 +189,7 @@ func TestOllamaValidation(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(envelope(tc.content, tc.reason, tc.done))
 			}))
 			defer srv.Close()
-			_, m, e := NewOllama(srv.URL, "qwen3:8b", time.Second).Generate(context.Background(), sample())
+			_, m, e := NewOllama(srv.URL, "qwen3:8b", time.Second, testCounter{}).Generate(context.Background(), sample())
 			if (e == nil) != tc.ok {
 				t.Fatal(e)
 			}
@@ -222,7 +222,7 @@ func TestWorkerSerial(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "qwen3:8b", time.Second)) }()
+	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "qwen3:8b", time.Second, testCounter{})) }()
 	defer func() {
 		cancel()
 		if e := <-done; e != nil {
@@ -253,11 +253,11 @@ func TestInputLimitsAndChronology(t *testing.T) {
 	}
 	in := sample()
 	in.Messages[0].Text = strings.Repeat("x", 7000)
-	if e := CheckBudget(in); e == nil {
+	if _, e := AnalyzeBudget(context.Background(), testCounter{}, in); e == nil {
 		t.Fatal("accepted over budget")
 	}
 	s := store(t)
-	h := Handler(s, "secret")
+	h := Handler(s, "secret", testCounter{})
 	b, _ := json.Marshal(in)
 	if w := request(h, "POST", "/v1/briefings", "large", b, true); w.Code != 422 {
 		t.Fatal(w.Code)
@@ -278,8 +278,8 @@ func TestInputLimitsAndChronology(t *testing.T) {
 		t.Fatal("unstable order")
 	}
 }
-func TestExamplesFitBudget(t *testing.T) {
-	for _, name := range []string{"01.json", "02.json", "03.json"} {
+func TestExamplesValid(t *testing.T) {
+	for _, name := range []string{"01.json", "02.json", "03.json", "04-exact-20.json"} {
 		b, e := os.ReadFile(filepath.Join("..", "..", "examples", name))
 		if e != nil {
 			t.Fatal(e)
@@ -290,9 +290,6 @@ func TestExamplesFitBudget(t *testing.T) {
 		}
 		if e = in.Normalize(); e != nil {
 			t.Fatal(e)
-		}
-		if e = CheckBudget(in); e != nil {
-			t.Fatalf("%s: %v (%d bytes)", name, e, len(SystemPrompt)+len(userData(in)))
 		}
 	}
 }
@@ -309,7 +306,7 @@ func TestWorkerFailure(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "q", time.Second)) }()
+	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "q", time.Second, testCounter{})) }()
 	defer func() { cancel(); <-done }()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -334,8 +331,19 @@ func TestExternalSimulation(t *testing.T) {
 	if !strings.HasPrefix(base, "http://127.0.0.1:") {
 		t.Fatal("simulation must be local")
 	}
+	var counter BudgetCounter = testCounter{}
+	if os.Getenv("BRIEFING_TEST_BUDGET_PYTHON") != "" {
+		python := localPythonCounter(t)
+		python.BaseURL = base
+		python.Model = "qwen3:8b"
+		s, u := SyntheticProbe()
+		if err := python.Verify(context.Background(), s, u); err != nil {
+			t.Fatal(err)
+		}
+		counter = python
+	}
 	s := store(t)
-	h := Handler(s, "secret")
+	h := Handler(s, "secret", counter)
 	b, _ := json.Marshal(sample())
 	w := request(h, "POST", "/v1/briefings", "simulation", b, true)
 	if w.Code != 202 {
@@ -345,7 +353,7 @@ func TestExternalSimulation(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &job)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, s, NewOllama(base, "qwen3:8b", 3*time.Second)) }()
+	go func() { done <- Run(ctx, s, NewOllama(base, "qwen3:8b", 3*time.Second, counter)) }()
 	defer func() {
 		cancel()
 		if e := <-done; e != nil {
@@ -398,7 +406,7 @@ func TestOllamaErrorsAndTimeout(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
-			_, _, e := NewOllama(srv.URL, "q", 30*time.Millisecond).Generate(context.Background(), sample())
+			_, _, e := NewOllama(srv.URL, "q", 30*time.Millisecond, testCounter{}).Generate(context.Background(), sample())
 			if e == nil || strings.Contains(e.Error(), "secret") {
 				t.Fatal(e)
 			}
@@ -434,7 +442,7 @@ func TestShutdownRequeuesInterrupted(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "q", time.Second)) }()
+	go func() { done <- Run(ctx, s, NewOllama(srv.URL, "q", time.Second, testCounter{})) }()
 	select {
 	case <-started:
 	case <-time.After(3 * time.Second):

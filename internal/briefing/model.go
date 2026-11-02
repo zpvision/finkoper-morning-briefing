@@ -124,14 +124,6 @@ func userData(in Input) []byte {
 	b, _ := json.Marshal(in)
 	return b
 }
-func CheckBudget(in Input) error {
-	// Deliberately restrictive byte estimate, not a tokenizer. Reserve template overhead and output.
-	if len(SystemPrompt)+len(userData(in))+512+1500 > 8192 {
-		return errors.New("input_budget_exceeded")
-	}
-	return nil
-}
-
 func ValidateResult(raw []byte, in Input) (*Result, error) {
 	var root map[string]json.RawMessage
 	if Strict(raw, &root) != nil || len(root) != 1 || root["topics"] == nil || bytes.Equal(bytes.TrimSpace(root["topics"]), []byte("null")) {

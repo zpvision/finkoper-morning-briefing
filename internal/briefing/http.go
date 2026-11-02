@@ -20,7 +20,11 @@ func write(w http.ResponseWriter, status int, v any) {
 func fail(w http.ResponseWriter, status int, msg string) {
 	write(w, status, map[string]string{"error": msg})
 }
-func Handler(s *Store, token string) http.Handler {
+func Handler(s *Store, token string, counters ...BudgetCounter) http.Handler {
+	var counter BudgetCounter
+	if len(counters) > 0 {
+		counter = counters[0]
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		if s.db.PingContext(r.Context()) != nil {
@@ -54,9 +58,44 @@ func Handler(s *Store, token string) http.Handler {
 			fail(w, 400, err.Error())
 			return
 		}
-		// Capacity/budget do not affect already accepted idempotent jobs.
-		if err = CheckBudget(in); err != nil {
-			fail(w, 422, err.Error())
+		// Lookup precedes counting, so retries of accepted jobs survive helper errors/capacity.
+		respondExisting := func() bool {
+			if old, lookupErr := s.Lookup(r.Context(), in, key); lookupErr == nil {
+				write(w, 202, map[string]any{"job_id": old.ID, "status": old.Status, "created_at": old.Created})
+				return true
+			} else if errors.Is(lookupErr, ErrConflict) {
+				fail(w, 409, lookupErr.Error())
+				return true
+			} else if !errors.Is(lookupErr, sql.ErrNoRows) {
+				fail(w, 500, "storage_error")
+				return true
+			}
+			return false
+		}
+		if respondExisting() {
+			return
+		}
+		system, user := PromptInput(in)
+		budget, budgetErr := checkBudget(r.Context(), counter, system, user)
+		err = budgetErr
+		// Another identical request may have committed while this one waited for the helper.
+		if (err != nil || !budget.Verified) && respondExisting() {
+			return
+		}
+		if err != nil {
+			var exceeded *BudgetExceeded
+			if errors.As(err, &exceeded) {
+				write(w, 422, struct {
+					Error string `json:"error"`
+					Budget
+				}{"input_budget_exceeded", exceeded.Budget})
+			} else {
+				fail(w, 503, budgetFailure(err))
+			}
+			return
+		}
+		if !budget.Verified {
+			fail(w, 503, "context_runtime_not_verified")
 			return
 		}
 		j, err := s.Enqueue(r.Context(), in, key)

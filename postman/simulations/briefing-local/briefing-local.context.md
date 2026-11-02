@@ -13,6 +13,8 @@
 
 ## Проверено
 
+2026-11-02, доработка бюджета: mock расширен /api/version, /api/tags, /api/show и render-only ответом /api/chat по предоставленному шаблону. TestExternalSimulation с BRIEFING_TEST_BUDGET_PYTHON PASS: настоящий Go → subprocess Python/tokenizers → HTTP mock, задание succeeded. Отдельно cmd/budget --verify --probe подтвердил искусственную пробу и все три входа (01,02,04-exact-20) против этого mock; input counts 1848/1122/1827. Проверки runtime в этом прогоне относятся только к локальному fixture, не к серверной Ollama. Обычные tests используют явно тестовый счётчик, доп. локальные tests — настоящий helper. Метрики Ollama в mock искусственные и не используются как доказательство точности подсчёта.
+
 2026-11-02: TestExternalSimulation PASS: HTTP 202, persisted job, worker вызвал зависимость, статус succeeded, один пункт с m1 и load_ms=0. В ndjson наблюдался request: routeKey=ollama, POST /api/chat, statusCode=200, responseSize=336. Других членов simulation нет. Это подтверждает совместимость приложения с данным fixture по реальному HTTP, не работу реального AI-сервера.
 
 Обычные Go-тесты отдельно проверяют HTTP error, таймаут, invalid JSON, error field, length/not done, enum/источники/nullable поля, auth, idempotency race, queue recovery/capacity, shutdown и serial execution. Эти ошибки прогоняются через httptest, не Postman fault injection.

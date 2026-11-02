@@ -3,7 +3,7 @@
   "info": {
     "title": "FinKoper Утренний обзор",
     "version": "1.0.0",
-    "description": "Trusted backend API; company_id is tenant scope, not user authorization. Limits: 1 MiB body, 200 total messages, conservative 8192 context budget. Context before from; messages in [from,to); unique IDs across both groups. No silent truncation. Idempotency normalizes JSON and absent/null/empty context, preserving array order."
+    "description": "Trusted backend API; company_id is tenant scope, not user authorization. Limits: 1 MiB body, 200 total messages, local Qwen3 token budget: input_tokens + 1500 <= 8192. Context before from; messages in [from,to); unique IDs across both groups. No silent truncation. Idempotency normalizes JSON and absent/null/empty context, preserving array order."
   },
   "servers": [
     {
@@ -155,11 +155,53 @@
             }
           },
           "422": {
-            "description": "Conservative model input budget exceeded",
+            "description": "Local tokenizer budget exceeded; no truncation. Safe numeric diagnostics, no message text.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "input_tokens",
+                    "output_reserve",
+                    "context_tokens",
+                    "required_tokens",
+                    "remaining_tokens",
+                    "method",
+                    "compatibility_verified"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "input_budget_exceeded"
+                      ]
+                    },
+                    "input_tokens": {
+                      "type": "integer"
+                    },
+                    "output_reserve": {
+                      "type": "integer"
+                    },
+                    "context_tokens": {
+                      "type": "integer"
+                    },
+                    "required_tokens": {
+                      "type": "integer"
+                    },
+                    "remaining_tokens": {
+                      "type": "integer"
+                    },
+                    "method": {
+                      "type": "string",
+                      "enum": [
+                        "qwen3_tokenizers_ollama_template_no_normalization"
+                      ]
+                    },
+                    "compatibility_verified": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -184,6 +226,16 @@
           },
           "500": {
             "description": "Storage failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Helper unavailable/timed out or runtime compatibility not verified. No byte fallback.",
             "content": {
               "application/json": {
                 "schema": {

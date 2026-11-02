@@ -12,10 +12,13 @@ postman simulation run postman/simulations/briefing-local/briefing-local.sim.yam
 ```powershell
 # Терминал 2:
 $env:BRIEFING_TEST_SIMULATION_URL='http://127.0.0.1:18085/ollama'
+# Для проверки настоящего helper (нужны подготовленные локальные ресурсы и venv):
+$env:BRIEFING_TEST_BUDGET_PYTHON=(Join-Path $PWD '.venv-budget/Scripts/python.exe')
 go test ./internal/briefing -run '^TestExternalSimulation$' -v -count=1 -timeout 20s
 Remove-Item Env:BRIEFING_TEST_SIMULATION_URL
+Remove-Item Env:BRIEFING_TEST_BUDGET_PYTHON
 ```
 
-В журнале должен появиться request: routeKey=ollama, POST /api/chat, statusCode=200. Тест создаёт временную БД, разрешает только loopback URL, без переменной пропускается. Fixture с m1 предназначен только для этого теста, не для оценки смыслового качества двух примеров. Mock не моделирует токенизацию, GPU, другие сервисы и реальный вывод модели.
+В журнале должны появиться request к /api/version, /api/tags, /api/show и /api/chat. Для /api/chat сначала проверяется render-only, затем выполняется контролируемая генерация. Тест создаёт временную БД, разрешает только loopback URL, без BRIEFING_TEST_SIMULATION_URL пропускается. Без BRIEFING_TEST_BUDGET_PYTHON используется явно тестовый счётчик; с этой переменной запускается настоящий Python subprocess/tokenizers, а Ollama остаётся mock. Fixture предназначен только для интеграционных проверок, не для оценки смыслового качества примеров. Mock не моделирует GPU, конкуренцию других сервисов и реальный вывод модели.
 
 Postman init создал локальные AGENTS.md и skills/. Облачная workspace не привязана, секретов и реальных переписок в артефактах нет.
