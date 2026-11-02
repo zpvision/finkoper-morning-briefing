@@ -1,5 +1,7 @@
 # briefing-local: локальные свидетельства
 
+2026-11-02, thinking diagnostic: готовый diagnose-thinking.exe --run выполнен только на loopback Postman simulation с настоящим локальным helper/tokenizers. Наблюдались metadata/version/digest/template, два render-only и одна генерация на каждый из 04-exact-20/02 (HTTP 200). Оба отчёта подтвердили рендер, counts 2364/1659, reserve 4096, по одной генерации и error=null. Контрольный текст thinking отсутствует в JSONL, доступен только размер. Mock теперь поддерживает обе ветки think, прежний false сохранён. Эти результаты подтверждают транспорт/проверки с fixture, не серверную совместимость и не смысловую точность. Фактический thinking-render и качество на Ollama ещё требуют ручного операторского --run; к серверу не подключались. Источник: cmd/diagnose-thinking, internal/diagnostic/thinking_test.go и postman/mocks/ollama/default.js.
+
 Дата: 2026-11-02. CLI 1.80.0. Источник mock: postman/specs/ollama-subset.openapi.json, контролируемый fixture native Ollama endpoint, с полями официального upstream контракта. Поиск опубликованного mock владельца пропущен: облачная авторизация и workspace не использовались.
 
 ## Назначение и предпосылки

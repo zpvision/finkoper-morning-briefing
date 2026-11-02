@@ -57,8 +57,10 @@ func checkBudget(ctx context.Context, c BudgetCounter, system, user string) (Bud
 type PythonCounter struct {
 	Python, Script, Resources, BaseURL, Model string
 	Timeout                                   time.Duration
-	slot                                      chan struct{}
-	verified                                  atomic.Bool
+	// Explicit diagnostic-only opt-in; never set by service configuration.
+	DiagnosticThinking bool
+	slot               chan struct{}
+	verified           atomic.Bool
 }
 
 func NewPythonCounter() (*PythonCounter, error) {
@@ -124,7 +126,11 @@ func (p *PythonCounter) invoke(ctx context.Context, mode string, request any, ou
 	if err != nil {
 		return errors.New("budget_helper_request_failed")
 	}
-	cmd := exec.CommandContext(ctx, p.Python, "-I", p.Script, "--resources", p.Resources, "--mode", mode, "--http-timeout", strconv.FormatFloat(p.Timeout.Seconds(), 'f', 3, 64))
+	args := []string{"-I", p.Script, "--resources", p.Resources, "--mode", mode, "--http-timeout", strconv.FormatFloat(p.Timeout.Seconds(), 'f', 3, 64)}
+	if p.DiagnosticThinking {
+		args = append(args, "--thinking")
+	}
+	cmd := exec.CommandContext(ctx, p.Python, args...)
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = bytes.NewReader(raw)
 	var output limitedOutput
@@ -175,7 +181,11 @@ func (p *PythonCounter) Verify(ctx context.Context, system, user string) error {
 		Template string `json:"template_sha256"`
 		Method   string `json:"method"`
 	}
-	err := p.invoke(ctx, "verify", map[string]string{"system": system, "user": user, "base_url": p.BaseURL, "model": p.Model}, &result)
+	request := map[string]any{"system": system, "user": user, "base_url": p.BaseURL, "model": p.Model}
+	if p.DiagnosticThinking {
+		request["format"] = json.RawMessage(OutputSchema)
+	}
+	err := p.invoke(ctx, "verify", request, &result)
 	if err != nil {
 		p.verified.Store(false)
 		return err

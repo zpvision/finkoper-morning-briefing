@@ -44,13 +44,14 @@ class HelperTests(unittest.TestCase):
         if not show_path.exists():
             self.skipTest("local show export missing")
         template = json.loads(show_path.read_bytes())["template"]
-        for mode, code in (("ok", None), ("missing", "context_render_only_unavailable"),
+        cases = (("ok", None), ("missing", "context_render_only_unavailable"),
                            ("mismatch", "context_chat_render_mismatch"),
                            ("version", "context_renderer_ollama_version_not_validated"),
                            ("digest", "context_tokenizer_model_not_validated"),
                            ("template", "context_chat_template_changed"),
-                           ("http", "ollama_verification_request_failed")):
-            with self.subTest(mode=mode):
+                           ("http", "ollama_verification_request_failed"))
+        for thinking, mode, code in [(thinking, mode, code) for thinking in (False, True) for mode, code in cases]:
+            with self.subTest(mode=mode, thinking=thinking):
                 chats = []
                 class Handler(BaseHTTPRequestHandler):
                     def log_message(self, *_):
@@ -81,13 +82,17 @@ class HelperTests(unittest.TestCase):
                         elif self.path == "/api/chat":
                             chats.append(payload)
                             self_test.assertIs(payload["_debug_render_only"], True)
-                            self_test.assertIs(payload["think"], False)
+                            self_test.assertIs(payload["think"], thinking)
+                            if thinking:
+                                self_test.assertEqual(payload["format"], {"type": "object"})
+                                self_test.assertEqual(payload["options"]["num_predict"], 4096)
+                                self_test.assertEqual(payload["options"]["temperature"], 0.6)
                             self_test.assertIs(payload["shift"], False)
                             if mode == "missing":
                                 self.respond({"message": {"content": "not a render"}, "done": True})
                             else:
                                 rendered = ContextBudget.render(payload["messages"][0]["content"],
-                                                                payload["messages"][1]["content"])
+                                                                payload["messages"][1]["content"], thinking)
                                 self.respond({"_debug_info": {"rendered_template":
                                     rendered + " " if mode == "mismatch" else rendered}})
                         else:
@@ -97,13 +102,13 @@ class HelperTests(unittest.TestCase):
                     thread = threading.Thread(target=server.serve_forever, daemon=True)
                     thread.start()
                     try:
-                        counter = ContextBudget(RESOURCES)
+                        counter = ContextBudget(RESOURCES, thinking=thinking)
                         args = (f"http://127.0.0.1:{server.server_port}", "qwen3:8b", "system", "и\u0306\n ")
                         if code:
                             with self.assertRaisesRegex(BudgetError, code):
-                                counter.verify(*args)
+                                counter.verify(*args, output_schema={"type": "object"} if thinking else None)
                         else:
-                            self.assertTrue(counter.verify(*args)["verified"])
+                            self.assertTrue(counter.verify(*args, output_schema={"type": "object"} if thinking else None)["verified"])
                         self.assertLessEqual(len(chats), 1)  # No retry or ordinary generation fallback.
                     finally:
                         server.shutdown()

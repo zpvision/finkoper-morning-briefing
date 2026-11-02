@@ -1,7 +1,8 @@
 """Adapted from the supplied context_budget.py; local tokenizers, no weights/downloads.
 
 count is strictly offline. verify explicitly checks the actual Ollama render-only
-extension, never falls back to generation, and supports only system+user/think=false.
+extension, never falls back to generation. Thinking is an explicit diagnostic flag;
+the default system+user/think=false behavior remains unchanged.
 """
 import argparse
 import hashlib
@@ -32,10 +33,12 @@ def digest(data):
 
 
 class ContextBudget:
-    def __init__(self, directory):
+    def __init__(self, directory, thinking=False):
         self.directory = Path(directory)
         self.manifest = None
         self.tokenizer = None
+        self.thinking = thinking
+        self.output_reserve = 4096 if thinking else 1500
 
     def load(self):
         if self.tokenizer is not None:
@@ -63,19 +66,23 @@ class ContextBudget:
         self.manifest, self.tokenizer = manifest, tokenizer
 
     @staticmethod
-    def render(system, user):
-        return (f"<|im_start|>system\n\n{system}<|im_end|>\n"
-                f"<|im_start|>user\n{user} /no_think<|im_end|>\n"
-                "<|im_start|>assistant\n<think>\n\n</think>\n\n")
+    def render(system, user, thinking=False):
+        # Same two branches as the supplied context_budget.py, without changing data.
+        result = f"<|im_start|>system\n\n{system}<|im_end|>\n"
+        result += f'<|im_start|>user\n{user} /{"think" if thinking else "no_think"}<|im_end|>\n'
+        result += "<|im_start|>assistant\n"
+        if not thinking:
+            result += "<think>\n\n</think>\n\n"
+        return result
 
     def count(self, system, user):
         self.load()
-        count = len(self.tokenizer.encode(self.render(system, user), add_special_tokens=False).ids)
-        return {"input_tokens": count, "output_reserve": 1500, "context_tokens": 8192,
-                "required_tokens": count + 1500, "remaining_tokens": 8192 - count - 1500,
+        count = len(self.tokenizer.encode(self.render(system, user, self.thinking), add_special_tokens=False).ids)
+        return {"input_tokens": count, "output_reserve": self.output_reserve, "context_tokens": 8192,
+                "required_tokens": count + self.output_reserve, "remaining_tokens": 8192 - count - self.output_reserve,
                 "method": METHOD, "compatibility_verified": False}
 
-    def verify(self, base_url, model, system, user, http_timeout=5):
+    def verify(self, base_url, model, system, user, http_timeout=5, output_schema=None):
         self.load()
         parsed = urllib.parse.urlsplit(base_url)
         if (parsed.scheme not in ("http", "https") or not parsed.netloc
@@ -116,17 +123,23 @@ class ContextBudget:
                 raise BudgetError("context_chat_template_changed")
 
         check_model()
-        response = call("/api/chat", {
-            "model": model, "stream": False, "think": False, "truncate": False, "shift": False,
+        payload = {
+            "model": model, "stream": False, "think": self.thinking, "truncate": False, "shift": False,
             "_debug_render_only": True, "keep_alive": "30m",
-            "options": {"num_ctx": 8192, "num_predict": 1500, "temperature": 0},
+            "options": {"num_ctx": 8192, "num_predict": self.output_reserve, "temperature": 0},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        })
+        }
+        if self.thinking:
+            if not isinstance(output_schema, dict) or not output_schema:
+                raise BudgetError("budget_helper_invalid_request")
+            payload["format"] = output_schema
+            payload["options"].update(temperature=0.6, top_p=0.95, top_k=20, min_p=0)
+        response = call("/api/chat", payload)
         # Do not mistake ignored _debug_render_only + ordinary generation for a pass.
         info = response.get("_debug_info")
         if not isinstance(info, dict) or not isinstance(info.get("rendered_template"), str):
             raise BudgetError("context_render_only_unavailable")
-        if info["rendered_template"] != self.render(system, user):
+        if info["rendered_template"] != self.render(system, user, self.thinking):
             raise BudgetError("context_chat_render_mismatch")
         check_model()
         return {"verified": True, "model_digest": self.manifest["model_digest"],
@@ -139,6 +152,7 @@ def main():
     parser.add_argument("--resources", required=True)
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
     parser.add_argument("--http-timeout", type=float, default=5)
+    parser.add_argument("--thinking", action="store_true", help="diagnostic only: think=true, reserve=4096")
     args = parser.parse_args()
     try:
         if not 0 < args.http_timeout <= 120:
@@ -148,13 +162,17 @@ def main():
             raise BudgetError("budget_helper_input_too_large")
         request = json.loads(raw)
         expected = {"system", "user"} if args.mode == "count" else {"system", "user", "base_url", "model"}
-        if not isinstance(request, dict) or set(request) != expected or any(not isinstance(v, str) for v in request.values()):
+        if args.thinking and args.mode == "verify":
+            expected.add("format")
+        if (not isinstance(request, dict) or set(request) != expected
+                or any(not isinstance(v, str) for k, v in request.items() if k != "format")
+                or ("format" in expected and not isinstance(request["format"], dict))):
             raise BudgetError("budget_helper_invalid_request")
-        counter = ContextBudget(args.resources)
+        counter = ContextBudget(args.resources, thinking=args.thinking)
         if args.mode == "count":
             result = counter.count(request["system"], request["user"])
         else:
-            result = counter.verify(request["base_url"], request["model"], request["system"], request["user"], args.http_timeout)
+            result = counter.verify(request["base_url"], request["model"], request["system"], request["user"], args.http_timeout, request.get("format"))
         print(json.dumps(result, ensure_ascii=True))
         return 0
     except BudgetError as error:

@@ -37,50 +37,60 @@ func Variants() []Variant {
 func Hash(s string) string { sum := sha256.Sum256([]byte(s)); return hex.EncodeToString(sum[:]) }
 
 type Record struct {
-	File               string           `json:"file"`
-	Variant            string           `json:"variant"`
-	Mode               string           `json:"mode"`
-	PromptVersion      string           `json:"prompt_version"`
-	PromptHash         string           `json:"prompt_sha256"`
-	UserHash           string           `json:"user_json_sha256"`
-	MessagesHash       string           `json:"messages_sha256"`
-	FormatHash         string           `json:"format_sha256"`
-	RequestHash        string           `json:"request_sha256"`
-	RenderedHash       *string          `json:"rendered_prompt_sha256"`
-	SystemPreserved    *bool            `json:"rendered_system_preserved"`
-	SystemBytes        int              `json:"system_bytes"`
-	UserBytes          int              `json:"user_json_bytes"`
-	Format             string           `json:"format"`
-	Model              string           `json:"model"`
-	Parameters         map[string]any   `json:"parameters"`
-	Budget             briefing.Budget  `json:"budget"`
-	Metrics            briefing.Metrics `json:"metrics"`
-	HTTPMS             *int64           `json:"ollama_http_ms"`
-	FormatRenderMS     *int64           `json:"format_render_check_ms"`
-	TokenDifference    *int64           `json:"prompt_eval_count_minus_local"`
-	GenerationAttempts int              `json:"generation_attempts"`
-	Done               *bool            `json:"done"`
-	DoneReason         *string          `json:"done_reason"`
-	Result             json.RawMessage  `json:"result"`
-	InvalidContent     *string          `json:"invalid_json_content,omitempty"`
-	StructuralError    *string          `json:"structural_validation_error"`
-	Error              *string          `json:"error"`
+	File                   string           `json:"file"`
+	Variant                string           `json:"variant"`
+	Mode                   string           `json:"mode"`
+	PromptVersion          string           `json:"prompt_version"`
+	PromptHash             string           `json:"prompt_sha256"`
+	UserHash               string           `json:"user_json_sha256"`
+	MessagesHash           string           `json:"messages_sha256"`
+	FormatHash             string           `json:"format_sha256"`
+	RequestHash            string           `json:"request_sha256"`
+	RenderedHash           *string          `json:"rendered_prompt_sha256"`
+	SystemPreserved        *bool            `json:"rendered_system_preserved"`
+	SystemBytes            int              `json:"system_bytes"`
+	UserBytes              int              `json:"user_json_bytes"`
+	Format                 string           `json:"format"`
+	Model                  string           `json:"model"`
+	Parameters             map[string]any   `json:"parameters"`
+	Budget                 briefing.Budget  `json:"budget"`
+	Metrics                briefing.Metrics `json:"metrics"`
+	HTTPMS                 *int64           `json:"ollama_http_ms"`
+	FormatRenderMS         *int64           `json:"format_render_check_ms"`
+	TokenDifference        *int64           `json:"prompt_eval_count_minus_local"`
+	GenerationAttempts     int              `json:"generation_attempts"`
+	Done                   *bool            `json:"done"`
+	DoneReason             *string          `json:"done_reason"`
+	Result                 json.RawMessage  `json:"result"`
+	InvalidContent         *string          `json:"invalid_json_content,omitempty"`
+	StructuralError        *string          `json:"structural_validation_error"`
+	Error                  *string          `json:"error"`
+	ThinkingPresent        *bool            `json:"thinking_present,omitempty"`
+	ThinkingBytes          *int             `json:"thinking_bytes,omitempty"`
+	FinalContentBytes      *int             `json:"final_content_bytes,omitempty"`
+	Incomplete             *bool            `json:"incomplete,omitempty"`
+	GenerationLimitReached *bool            `json:"generation_limit_reached,omitempty"`
+	ComparisonNote         string           `json:"comparison_note,omitempty"`
 }
 
 type Runner struct {
 	BaseURL, Model string
 	Client         *http.Client
 	Counter        briefing.BudgetCounter
+	Thinking       bool
 }
 
 func NewRunner(base, model string, timeout time.Duration, counter briefing.BudgetCounter) *Runner {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	return &Runner{base, model, &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, counter}
+	return &Runner{BaseURL: base, Model: model, Client: &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, Counter: counter}
 }
 
 // Same pinned, two-message rendering as helper.py. Diagnostic use only.
-func ExpectedRender(system, user string) string {
+func ExpectedRender(system, user string, thinking ...bool) string {
+	if len(thinking) > 0 && thinking[0] {
+		return "<|im_start|>system\n\n" + system + "<|im_end|>\n<|im_start|>user\n" + user + " /think<|im_end|>\n<|im_start|>assistant\n"
+	}
 	return "<|im_start|>system\n\n" + system + "<|im_end|>\n<|im_start|>user\n" + user + " /no_think<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
 }
 func safeHelperError(err error, fallback string) string {
@@ -139,8 +149,16 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	messages := []map[string]string{{"role": "system", "content": v.Prompt}, {"role": "user", "content": user}}
 	msgRaw, _ := json.Marshal(messages)
 	options := map[string]any{"temperature": 0, "num_ctx": briefing.ContextTokens, "num_predict": briefing.OutputReserve}
-	params := map[string]any{"stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "options": options}
-	payload := map[string]any{"model": r.Model, "stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "options": options, "messages": messages, "format": v.Format}
+	reserve := briefing.OutputReserve
+	if r.Thinking {
+		reserve = 4096
+		options = map[string]any{"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0, "num_ctx": 8192, "num_predict": reserve}
+	}
+	params := map[string]any{"stream": false, "think": r.Thinking, "truncate": false, "shift": false, "keep_alive": "30m", "options": options}
+	if r.Thinking {
+		params["timeout_ms"] = 180000
+	}
+	payload := map[string]any{"model": r.Model, "stream": false, "think": r.Thinking, "truncate": false, "shift": false, "keep_alive": "30m", "options": options, "messages": messages, "format": v.Format}
 	raw, marshalErr := json.Marshal(payload)
 	format := "json"
 	if len(v.Format) > 0 && v.Format[0] == '{' {
@@ -154,6 +172,13 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
+	if r.Thinking {
+		out.ComparisonNote = "Compared with A: think, sampling, generation reserve and timeout change; this does not isolate think alone."
+		if r.Model != "qwen3:8b" {
+			failure("thinking_experiment_requires_qwen3_8b")
+			return
+		}
+	}
 	if marshalErr != nil {
 		failure("diagnostic_format_invalid")
 		return
@@ -172,7 +197,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure(safeHelperError(err, "diagnostic_budget_failed"))
 		return
 	}
-	if budget.InputTokens < 0 || budget.OutputReserve != briefing.OutputReserve || budget.ContextTokens != briefing.ContextTokens || budget.RequiredTokens != budget.InputTokens+briefing.OutputReserve || budget.RemainingTokens != briefing.ContextTokens-budget.RequiredTokens || budget.Method != briefing.BudgetMethod {
+	if budget.InputTokens < 0 || budget.OutputReserve != reserve || budget.ContextTokens != briefing.ContextTokens || budget.RequiredTokens != budget.InputTokens+reserve || budget.RemainingTokens != briefing.ContextTokens-budget.RequiredTokens || budget.Method != briefing.BudgetMethod {
 		failure("budget_helper_invalid_response")
 		return
 	}
@@ -191,7 +216,8 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure(safeHelperError(err, "diagnostic_compatibility_failed"))
 		return
 	}
-	// Verify's original probe has no format. Also test the exact variant payload,
+	// The default Verify probe has no format; thinking Verify includes topics-v1.
+	// Also test the exact variant payload,
 	// including format, before its sole generation; report hashes, never rendered text.
 	renderStart := time.Now()
 	rendered, renderErr := r.renderCheck(ctx, payload)
@@ -203,7 +229,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	}
 	renderHash := Hash(rendered)
 	out.RenderedHash = &renderHash
-	preserved := rendered == ExpectedRender(v.Prompt, user)
+	preserved := rendered == ExpectedRender(v.Prompt, user, r.Thinking)
 	out.SystemPreserved = &preserved
 	if !preserved {
 		failure("context_chat_render_mismatch")
@@ -242,7 +268,8 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		Reason  *string `json:"done_reason"`
 		Error   string  `json:"error"`
 		Message struct {
-			Content string `json:"content"`
+			Content  string `json:"content"`
+			Thinking string `json:"thinking"`
 		} `json:"message"`
 		Total  *int64 `json:"total_duration"`
 		Load   *int64 `json:"load_duration"`
@@ -275,10 +302,25 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		out.TokenDifference = &diff
 	}
 	content := []byte(envelope.Message.Content)
+	if r.Thinking {
+		present := len(envelope.Message.Thinking) > 0
+		size := len(envelope.Message.Thinking)
+		contentSize := len(content)
+		out.ThinkingPresent = &present
+		out.ThinkingBytes = &size
+		out.FinalContentBytes = &contentSize
+		limit := envelope.Reason != nil && *envelope.Reason == "length"
+		incomplete := envelope.Done == nil || !*envelope.Done || envelope.Reason == nil || *envelope.Reason != "stop" || len(bytes.TrimSpace(content)) == 0
+		out.GenerationLimitReached = &limit
+		out.Incomplete = &incomplete
+	}
+	envelope.Message.Thinking = "" // Never copy reasoning text into a report or error.
 	if json.Valid(content) {
 		out.Result = json.RawMessage(content)
 	} else {
-		out.InvalidContent = &envelope.Message.Content
+		if !r.Thinking {
+			out.InvalidContent = &envelope.Message.Content
+		}
 	}
 	if err = validate(content); err != nil {
 		code := "invalid_model_result"
@@ -292,6 +334,14 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure("ollama_error")
 	} else if envelope.Done == nil || !*envelope.Done || envelope.Reason == nil || *envelope.Reason != "stop" {
 		failure("ollama_incomplete_response")
+	}
+	if r.Thinking {
+		if out.Incomplete != nil && *out.Incomplete && out.Error == nil {
+			failure("ollama_incomplete_response")
+		}
+		if out.Error != nil || out.StructuralError != nil {
+			out.Result = nil
+		}
 	}
 	return
 }
