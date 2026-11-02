@@ -1,0 +1,52 @@
+{
+  "id": "hol-10",
+  "synthetic": true,
+  "scenario": "Контекст, неизвестный документ и два разных ожидания",
+  "expected_topics": [
+    {
+      "question": "Уведомление инспекции",
+      "required_source_ids": [
+        "m1",
+        "m4"
+      ],
+      "essential_facts": [
+        "Содержание неизвестно",
+        "Клиент ещё не отправил фото"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Оформление пропуска",
+      "required_source_ids": [
+        "c1",
+        "c2",
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Лебедева",
+        "Срок действия с 12 по 18 ноября",
+        "Только заявка в бюро пропусков, без заказа удостоверения",
+        "Сотрудник обещал заполнить после обеда"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Даты действия пропуска стали дедлайном сотрудника",
+    "Фото уже получено",
+    "Придумано содержание уведомления",
+    "Пропуск уже оформлен"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

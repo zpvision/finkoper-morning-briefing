@@ -1,0 +1,33 @@
+{
+  "id": "dev-08",
+  "synthetic": true,
+  "scenario": "Как раньше с объясняющим контекстом",
+  "expected_topics": [
+    {
+      "question": "Доступ кассиру",
+      "required_source_ids": [
+        "c1",
+        "c2",
+        "m1",
+        "m2"
+      ],
+      "essential_facts": [
+        "Логин касса_север",
+        "Только просмотр продаж, без возвратов",
+        "Сотрудник обещал настройку завтра утром"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Переезд офиса включён новой темой",
+    "needs_context=true при объяснённом порядке",
+    "Настройка уже завершена"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

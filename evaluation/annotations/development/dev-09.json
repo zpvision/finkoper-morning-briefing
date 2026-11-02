@@ -1,0 +1,29 @@
+{
+  "id": "dev-09",
+  "synthetic": true,
+  "scenario": "Как раньше без контекста",
+  "expected_topics": [
+    {
+      "question": "Неизвестная схема премии",
+      "required_source_ids": [
+        "m1",
+        "m2"
+      ],
+      "essential_facts": [
+        "Просьба повторить зимнюю схему расчётов премии",
+        "Схема не объяснена; сотрудник запросил уточнение"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": true,
+      "forbidden_conclusions": [
+        "Придуман порядок расчёта",
+        "needs_context=false"
+      ]
+    }
+  ],
+  "forbidden_conclusions": [],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

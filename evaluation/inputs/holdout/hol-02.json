@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "hol-02",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "hol-02-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Добрый день, команда!",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "hol-02-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Здравствуйте.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "hol-02-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Спасибо за вчерашнюю встречу.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "hol-02-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Хорошей недели всем.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

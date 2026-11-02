@@ -1,0 +1,35 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "dev-04",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "dev-04-email",
+      "channel": "email",
+      "sender_role": "client",
+      "text": "Пришлите обновлённую доверенность на Котова.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "dev-04-email",
+      "channel": "email",
+      "sender_role": "staff",
+      "text": "Обновлённую доверенность направил на вашу почту.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "dev-04-telegram",
+      "channel": "telegram",
+      "sender_role": "client",
+      "text": "Получил доверенность на Котова, теперь всё верно.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    }
+  ]
+}

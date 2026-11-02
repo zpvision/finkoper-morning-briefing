@@ -1,0 +1,47 @@
+{
+  "id": "hol-08",
+  "synthetic": true,
+  "scenario": "Другой канал, обещание файла и подтверждённый результат",
+  "expected_topics": [
+    {
+      "question": "Ставка в счёте 71",
+      "required_source_ids": [
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Экспорт",
+        "Сотрудник сообщил об исправлении и отправке",
+        "Клиент подтвердил получение и правильную ставку"
+      ],
+      "allowed_statuses": [
+        "resolved"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Ожидание договора по 72",
+      "required_source_ids": [
+        "m4"
+      ],
+      "essential_facts": [
+        "Клиент обещал договор по счёту 72 после согласования с покупателем"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Договор по 72 уже получен",
+    "Ставка НДС названа конкретным числом без источника",
+    "Два счёта объединены"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

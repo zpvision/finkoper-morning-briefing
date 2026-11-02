@@ -1,0 +1,52 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "dev-08",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [
+    {
+      "id": "c1",
+      "conversation_id": "dev-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Под прошлой настройкой кассира имею в виду просмотр продаж без права возврата.",
+      "sent_at": "2026-11-09T17:01:00+03:00"
+    },
+    {
+      "id": "c2",
+      "conversation_id": "dev-08-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Этот набор прав согласован.",
+      "sent_at": "2026-11-09T17:02:00+03:00"
+    },
+    {
+      "id": "c3",
+      "conversation_id": "dev-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Ещё обсудим переезд офиса.",
+      "sent_at": "2026-11-09T17:03:00+03:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "dev-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Для нового магазина оформите доступ кассиру так же, как раньше. Логин — касса_север.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "dev-08-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Ограниченный доступ настрою завтра утром.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    }
+  ]
+}

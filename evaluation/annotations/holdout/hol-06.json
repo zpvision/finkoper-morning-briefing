@@ -1,0 +1,33 @@
+{
+  "id": "hol-06",
+  "synthetic": true,
+  "scenario": "Порядок объяснён позднее в периоде",
+  "expected_topics": [
+    {
+      "question": "Пакет для конкурса",
+      "required_source_ids": [
+        "m1",
+        "m2",
+        "m3",
+        "m4"
+      ],
+      "essential_facts": [
+        "Карточка организации и справка об отсутствии задолженности",
+        "Банковская гарантия не нужна",
+        "Карточка обновлена, справку сотрудник только обещал запросить сегодня"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": [
+        "Весь пакет готов",
+        "needs_context=true после пояснения",
+        "Добавлена банковская гарантия"
+      ]
+    }
+  ],
+  "forbidden_conclusions": [],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

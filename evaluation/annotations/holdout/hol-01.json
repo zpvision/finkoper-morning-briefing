@@ -1,0 +1,31 @@
+{
+  "id": "hol-01",
+  "synthetic": true,
+  "scenario": "Формальный ответ не решает вопрос",
+  "expected_topics": [
+    {
+      "question": "Причина роста расходов",
+      "required_source_ids": [
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Дубрава",
+        "Связь выросла с 6100 до 14700",
+        "Обращение зарегистрировано, объяснения ещё нет"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Формальный ответ означает resolved",
+    "Придумана причина роста"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "hol-08",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "hol-08-telegram",
+      "channel": "telegram",
+      "sender_role": "client",
+      "text": "Проверьте ставку НДС в счёте 71, у нас там экспорт.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "hol-08-email",
+      "channel": "email",
+      "sender_role": "staff",
+      "text": "Исправленный счёт 71 отправлен на почту.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "hol-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Исправленный 71 получил, ставка теперь верная.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "hol-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "По другому счёту, 72, пришлю договор после согласования с покупателем.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

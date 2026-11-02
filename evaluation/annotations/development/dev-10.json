@@ -1,0 +1,46 @@
+{
+  "id": "dev-10",
+  "synthetic": true,
+  "scenario": "Изменение суммы, срока и отмена соседней просьбы",
+  "expected_topics": [
+    {
+      "question": "Исправленный счёт",
+      "required_source_ids": [
+        "m1",
+        "m2"
+      ],
+      "essential_facts": [
+        "Актуальная сумма 21500 вместо 18000",
+        "Новый срок заменяет среду"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": "во вторник до 16:00",
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Выписка отменена",
+      "required_source_ids": [
+        "m3",
+        "m4"
+      ],
+      "essential_facts": [
+        "Клиент отменил просьбу о выписке, выгрузил сам"
+      ],
+      "allowed_statuses": [
+        "resolved"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "18000 — действующая сумма",
+    "Среда — действующий срок",
+    "Отменённую выписку нужно подготовить"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

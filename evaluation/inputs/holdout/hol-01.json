@@ -1,0 +1,35 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "hol-01",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "hol-01-email",
+      "channel": "email",
+      "sender_role": "client",
+      "text": "Почему по филиалу Дубрава расход на связь вырос с 6100 до 14700?",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "hol-01-email",
+      "channel": "email",
+      "sender_role": "staff",
+      "text": "Ваше обращение зарегистрировано.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "hol-01-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Спасибо. Причину роста всё-таки прошу объяснить.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    }
+  ]
+}

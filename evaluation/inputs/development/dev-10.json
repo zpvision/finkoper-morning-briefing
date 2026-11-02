@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "dev-10",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "dev-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Выставьте счёт на 18000 к среде.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "dev-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Стоп, сумма 21500, а счёт нужен во вторник до 16:00.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "dev-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Ещё сделайте выписку по кассе.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "dev-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Выписку отменяю, уже выгрузил сам.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

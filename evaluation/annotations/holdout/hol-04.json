@@ -1,0 +1,60 @@
+{
+  "id": "hol-04",
+  "synthetic": true,
+  "scenario": "Несколько независимых статусов",
+  "expected_topics": [
+    {
+      "question": "Договор фонда",
+      "required_source_ids": [
+        "m1"
+      ],
+      "essential_facts": [
+        "Подписанный договор по гранту ожидается от фонда"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Классификация станка",
+      "required_source_ids": [
+        "m2",
+        "m4"
+      ],
+      "essential_facts": [
+        "М-7 ошибочно отнесён к аренде",
+        "Клиент просит исправить; сотрудник обещал посмотреть в течение дня"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Копия устава не нужна",
+      "required_source_ids": [
+        "m3"
+      ],
+      "essential_facts": [
+        "Просьба снята, оригинал найден"
+      ],
+      "allowed_statuses": [
+        "resolved"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Все вопросы объединены",
+    "В течение дня — срок клиента",
+    "Реестр уже исправлен"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

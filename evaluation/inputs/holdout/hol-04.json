@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "hol-04",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "hol-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "По гранту жду от фонда подписанный договор, пока его нет.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "hol-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "А реестр оборудования поправьте: станок М-7 ошибочно отнесён к аренде.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "hol-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "И старую просьбу о копии устава снимаю, нашли оригинал.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "hol-04-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Реестр посмотрю в течение дня.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

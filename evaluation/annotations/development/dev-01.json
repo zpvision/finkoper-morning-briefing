@@ -1,0 +1,59 @@
+{
+  "id": "dev-01",
+  "synthetic": true,
+  "scenario": "Три независимые просьбы; срок только у средней",
+  "expected_topics": [
+    {
+      "question": "Копия договора",
+      "required_source_ids": [
+        "m1"
+      ],
+      "essential_facts": [
+        "Копия договора с Липой"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Расхождение компенсации",
+      "required_source_ids": [
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Орлова",
+        "7800 вместо 9200"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": "сегодня к 14 часам",
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Отрицательный остаток",
+      "required_source_ids": [
+        "m4"
+      ],
+      "essential_facts": [
+        "Требуется объяснение отрицательного остатка склада"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Срок компенсации перенесён на договор или склад",
+    "Просьбы объединены в одну тему"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

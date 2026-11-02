@@ -1,0 +1,31 @@
+{
+  "id": "dev-07",
+  "synthetic": true,
+  "scenario": "Неизвестное содержание требования",
+  "expected_topics": [
+    {
+      "question": "Ожидание текста требования",
+      "required_source_ids": [
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Текст требования неизвестен",
+        "Клиент обещал прислать вечером",
+        "Затем просит объяснить требование"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": [
+        "Придуманы сумма, статья, срок налоговой или перечень документов",
+        "Вечер — срок сотруднику"
+      ]
+    }
+  ],
+  "forbidden_conclusions": [],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

@@ -1,0 +1,45 @@
+{
+  "id": "dev-05",
+  "synthetic": true,
+  "scenario": "Ожидание контрагента и отдельная проверка",
+  "expected_topics": [
+    {
+      "question": "Ожидание накладной",
+      "required_source_ids": [
+        "m1",
+        "m2"
+      ],
+      "essential_facts": [
+        "Рейс не предоставил накладную",
+        "Клиент перешлёт после получения; обещана пятница"
+      ],
+      "allowed_statuses": [
+        "awaiting_client"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Расхождение тарифа хранения",
+      "required_source_ids": [
+        "m3"
+      ],
+      "essential_facts": [
+        "В счёте 340 вместо 310 за день",
+        "Просьба проверить тариф"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Пятница — срок сотруднику",
+    "Накладная уже получена"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "dev-01",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "dev-01-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Доброе утро. Нужна копия договора с Липой.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "dev-01-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Заодно пересчитайте компенсацию Орловой: указано 7800, должно быть 9200.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "dev-01-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "По компенсации ответьте сегодня к 14 часам.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "dev-01-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "И объясните, почему в карточке склада отрицательный остаток.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

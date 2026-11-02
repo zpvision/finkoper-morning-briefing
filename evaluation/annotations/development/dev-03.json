@@ -1,0 +1,30 @@
+{
+  "id": "dev-03",
+  "synthetic": true,
+  "scenario": "Обещание сотрудника",
+  "expected_topics": [
+    {
+      "question": "Подготовка справки",
+      "required_source_ids": [
+        "m1",
+        "m2"
+      ],
+      "essential_facts": [
+        "Миронова",
+        "Первое полугодие",
+        "Сотрудник обещал подготовить сегодня"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": [
+        "Обещание превращено в выполненную справку",
+        "Сегодня записано как запрошенный клиентом срок"
+      ]
+    }
+  ],
+  "forbidden_conclusions": [],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

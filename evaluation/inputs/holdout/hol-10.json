@@ -1,0 +1,60 @@
+{
+  "company_id": "synthetic_company",
+  "client_id": "hol-10",
+  "period": {
+    "from": "2026-11-09T18:00:00+03:00",
+    "to": "2026-11-10T09:00:00+03:00"
+  },
+  "context_messages": [
+    {
+      "id": "c1",
+      "conversation_id": "hol-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Согласуем схему временного пропуска: заполняете заявку в бюро пропусков, удостоверение заказывать не надо.",
+      "sent_at": "2026-11-09T17:01:00+03:00"
+    },
+    {
+      "id": "c2",
+      "conversation_id": "hol-10-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Принято, используем такой порядок.",
+      "sent_at": "2026-11-09T17:02:00+03:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "conversation_id": "hol-10-finchat",
+      "channel": "finchat",
+      "sender_role": "client",
+      "text": "Пришло уведомление инспекции, фото скину, когда вернусь. Что там требуется, ещё не читал.",
+      "sent_at": "2026-11-10T08:01:00+03:00"
+    },
+    {
+      "id": "m2",
+      "conversation_id": "hol-10-finchat",
+      "channel": "finchat",
+      "sender_role": "client",
+      "text": "А по пропуску для Лебедевой действуйте по согласованной схеме. Срок действия — с 12 по 18 ноября.",
+      "sent_at": "2026-11-10T08:02:00+03:00"
+    },
+    {
+      "id": "m3",
+      "conversation_id": "hol-10-email",
+      "channel": "email",
+      "sender_role": "staff",
+      "text": "Заявку на пропуск заполню после обеда.",
+      "sent_at": "2026-11-10T08:03:00+03:00"
+    },
+    {
+      "id": "m4",
+      "conversation_id": "hol-10-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Благодарю, фото уведомления пока не отправлял.",
+      "sent_at": "2026-11-10T08:04:00+03:00"
+    }
+  ]
+}

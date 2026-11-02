@@ -1,0 +1,106 @@
+{
+  "version": "synthetic-ru-v1",
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "dev-01",
+      "split": "development",
+      "input": "inputs/development/dev-01.json"
+    },
+    {
+      "id": "dev-02",
+      "split": "development",
+      "input": "inputs/development/dev-02.json"
+    },
+    {
+      "id": "dev-03",
+      "split": "development",
+      "input": "inputs/development/dev-03.json"
+    },
+    {
+      "id": "dev-04",
+      "split": "development",
+      "input": "inputs/development/dev-04.json"
+    },
+    {
+      "id": "dev-05",
+      "split": "development",
+      "input": "inputs/development/dev-05.json"
+    },
+    {
+      "id": "dev-06",
+      "split": "development",
+      "input": "inputs/development/dev-06.json"
+    },
+    {
+      "id": "dev-07",
+      "split": "development",
+      "input": "inputs/development/dev-07.json"
+    },
+    {
+      "id": "dev-08",
+      "split": "development",
+      "input": "inputs/development/dev-08.json"
+    },
+    {
+      "id": "dev-09",
+      "split": "development",
+      "input": "inputs/development/dev-09.json"
+    },
+    {
+      "id": "dev-10",
+      "split": "development",
+      "input": "inputs/development/dev-10.json"
+    },
+    {
+      "id": "hol-01",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-01.json"
+    },
+    {
+      "id": "hol-02",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-02.json"
+    },
+    {
+      "id": "hol-03",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-03.json"
+    },
+    {
+      "id": "hol-04",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-04.json"
+    },
+    {
+      "id": "hol-05",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-05.json"
+    },
+    {
+      "id": "hol-06",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-06.json"
+    },
+    {
+      "id": "hol-07",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-07.json"
+    },
+    {
+      "id": "hol-08",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-08.json"
+    },
+    {
+      "id": "hol-09",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-09.json"
+    },
+    {
+      "id": "hol-10",
+      "split": "holdout",
+      "input": "inputs/holdout/hol-10.json"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "hol-05",
+  "synthetic": true,
+  "scenario": "Продолжения и узкий дедлайн",
+  "expected_topics": [
+    {
+      "question": "Расшифровка комиссии",
+      "required_source_ids": [
+        "m1"
+      ],
+      "essential_facts": [
+        "Запрошена расшифровка комиссии банка"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Расхождение удержания",
+      "required_source_ids": [
+        "m2",
+        "m3",
+        "m4",
+        "m5",
+        "m6"
+      ],
+      "essential_facts": [
+        "Ефремов",
+        "1900 в листке вместо 1100 по заявлению",
+        "Повторное напоминание о той же проверке"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": "до конца рабочего дня",
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Срок перенесён на комиссию",
+    "Напоминание — третья тема"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}

@@ -15,3 +15,5 @@ bin/
 /resources/tokenizer/
 __pycache__/
 diagnostic-*.jsonl
+/evaluation/reports/
+*.jsonl

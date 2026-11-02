@@ -1,0 +1,47 @@
+{
+  "id": "hol-09",
+  "synthetic": true,
+  "scenario": "Отмена срока без отмены просьбы",
+  "expected_topics": [
+    {
+      "question": "Сверка авансов без срока",
+      "required_source_ids": [
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "essential_facts": [
+        "Проект Берег",
+        "Сверка остаётся нужна, прежний срок снят",
+        "Сотрудник только обещал начать сегодня"
+      ],
+      "allowed_statuses": [
+        "awaiting_staff"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    },
+    {
+      "question": "Оценка доставки отменена",
+      "required_source_ids": [
+        "m4"
+      ],
+      "essential_facts": [
+        "Клиент полностью отменил оценку расходов на доставку"
+      ],
+      "allowed_statuses": [
+        "resolved"
+      ],
+      "deadline_text": null,
+      "needs_context": false,
+      "forbidden_conclusions": []
+    }
+  ],
+  "forbidden_conclusions": [
+    "Четверг остался сроком",
+    "Сегодня — срок клиента",
+    "Сверка отменена или выполнена"
+  ],
+  "matching": "По смыслу; не требуется дословное совпадение. required_source_ids обязательны; допустимы дополнительные релевантные источники."
+}
