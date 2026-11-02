@@ -15,6 +15,20 @@ RESOURCES = Path(__file__).resolve().parents[2] / "resources/tokenizer/qwen3-8b"
 
 @unittest.skipUnless(RESOURCES.exists(), "prepare local tokenizer assets first")
 class HelperTests(unittest.TestCase):
+    def test_summary_reserve_is_separate(self):
+        old = ContextBudget(RESOURCES).count("system", "user")
+        summary = ContextBudget(RESOURCES, summary=True)
+        new = summary.count("system", "user")
+        self.assertEqual(new["input_tokens"], old["input_tokens"])
+        self.assertEqual(new["output_reserve"], 1000)
+        self.assertEqual(old["output_reserve"], 1500)
+        self.assertEqual(new["required_tokens"], old["required_tokens"] - 500)
+        self.assertEqual(new["remaining_tokens"], old["remaining_tokens"] + 500)
+        with self.assertRaisesRegex(BudgetError, "context_tokenizer_model_not_validated"):
+            summary.verify("http://127.0.0.1:1", "qwen3:14b-q4_K_M", "system", "user")
+        with self.assertRaisesRegex(BudgetError, "budget_helper_invalid_request"):
+            ContextBudget(RESOURCES, summary=True, thinking=True).load()
+
     def test_original_unicode_and_no_truncation(self):
         budget = ContextBudget(RESOURCES)
         user = "и\u0306 е\u0308 😀 <|im_start|>\n "
@@ -50,8 +64,8 @@ class HelperTests(unittest.TestCase):
                            ("digest", "context_tokenizer_model_not_validated"),
                            ("template", "context_chat_template_changed"),
                            ("http", "ollama_verification_request_failed"))
-        for thinking, mode, code in [(thinking, mode, code) for thinking in (False, True) for mode, code in cases]:
-            with self.subTest(mode=mode, thinking=thinking):
+        for thinking, summary, mode, code in [(thinking, summary, mode, code) for thinking, summary in ((False, False), (True, False), (False, True)) for mode, code in cases]:
+            with self.subTest(mode=mode, thinking=thinking, summary=summary):
                 chats = []
                 class Handler(BaseHTTPRequestHandler):
                     def log_message(self, *_):
@@ -83,6 +97,7 @@ class HelperTests(unittest.TestCase):
                             chats.append(payload)
                             self_test.assertIs(payload["_debug_render_only"], True)
                             self_test.assertIs(payload["think"], thinking)
+                            self_test.assertEqual(payload["options"]["num_predict"], 4096 if thinking else (1000 if summary else 1500))
                             if thinking:
                                 self_test.assertEqual(payload["format"], {"type": "object"})
                                 self_test.assertEqual(payload["options"]["num_predict"], 4096)
@@ -102,7 +117,7 @@ class HelperTests(unittest.TestCase):
                     thread = threading.Thread(target=server.serve_forever, daemon=True)
                     thread.start()
                     try:
-                        counter = ContextBudget(RESOURCES, thinking=thinking)
+                        counter = ContextBudget(RESOURCES, thinking=thinking, summary=summary)
                         args = (f"http://127.0.0.1:{server.server_port}", "qwen3:8b", "system", "и\u0306\n ")
                         if code:
                             with self.assertRaisesRegex(BudgetError, code):

@@ -35,15 +35,18 @@ def digest(data):
 
 
 class ContextBudget:
-    def __init__(self, directory, thinking=False, diagnostic_profile=None):
+    def __init__(self, directory, thinking=False, diagnostic_profile=None, summary=False):
         self.directory = Path(directory)
         self.manifest = None
         self.tokenizer = None
         self.thinking = thinking
-        self.output_reserve = 4096 if thinking else 1500
+        self.output_reserve = 1000 if summary else (4096 if thinking else 1500)
+        self.summary = summary
         self.diagnostic_profile = diagnostic_profile
 
     def load(self):
+        if self.summary and (self.thinking or self.diagnostic_profile):
+            raise BudgetError("budget_helper_invalid_request")
         if self.tokenizer is not None:
             return
         if sys.prefix == sys.base_prefix:
@@ -95,6 +98,8 @@ class ContextBudget:
 
     def verify(self, base_url, model, system, user, http_timeout=5, output_schema=None):
         self.load()
+        if self.summary and model != "qwen3:8b":
+            raise BudgetError("context_tokenizer_model_not_validated")
         if self.diagnostic_profile and model != self.manifest["model_name"]:
             raise BudgetError("context_tokenizer_model_not_validated")
         parsed = urllib.parse.urlsplit(base_url)
@@ -166,6 +171,7 @@ def main():
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
     parser.add_argument("--http-timeout", type=float, default=5)
     parser.add_argument("--thinking", action="store_true", help="diagnostic only: think=true, reserve=4096")
+    parser.add_argument("--summary", action="store_true", help="diagnostic only: 8B think=false, reserve=1000")
     parser.add_argument("--diagnostic-profile", choices=(DIAGNOSTIC_PROFILE,))
     args = parser.parse_args()
     try:
@@ -182,7 +188,7 @@ def main():
                 or any(not isinstance(v, str) for k, v in request.items() if k != "format")
                 or ("format" in expected and not isinstance(request["format"], dict))):
             raise BudgetError("budget_helper_invalid_request")
-        counter = ContextBudget(args.resources, thinking=args.thinking, diagnostic_profile=args.diagnostic_profile)
+        counter = ContextBudget(args.resources, thinking=args.thinking, diagnostic_profile=args.diagnostic_profile, summary=args.summary)
         if args.mode == "count":
             result = counter.count(request["system"], request["user"])
         else:

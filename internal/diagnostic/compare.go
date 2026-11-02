@@ -78,6 +78,7 @@ type Runner struct {
 	Client         *http.Client
 	Counter        briefing.BudgetCounter
 	Thinking       bool
+	SummaryMode    bool // Separate diagnostic contract, reserve=1000; never used by API.
 	VerifyOnly     bool // Explicit diagnostic check: render and metadata, no generation.
 }
 
@@ -151,6 +152,10 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	msgRaw, _ := json.Marshal(messages)
 	options := map[string]any{"temperature": 0, "num_ctx": briefing.ContextTokens, "num_predict": briefing.OutputReserve}
 	reserve := briefing.OutputReserve
+	if r.SummaryMode {
+		reserve = SummaryReserve
+		options["num_predict"] = reserve
+	}
 	if r.Thinking {
 		reserve = 4096
 		options = map[string]any{"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0, "num_ctx": 8192, "num_predict": reserve}
@@ -176,6 +181,10 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
+	if r.SummaryMode && (r.Model != "qwen3:8b" || r.Thinking) {
+		failure("summary_requires_qwen3_8b_think_false")
+		return
+	}
 	if r.Thinking {
 		out.ComparisonNote = "Compared with A: think, sampling, generation reserve and timeout change; this does not isolate think alone."
 		if r.Model != "qwen3:8b" {
@@ -325,14 +334,14 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	if json.Valid(content) {
 		out.Result = json.RawMessage(content)
 	} else {
-		if !r.Thinking {
+		if !r.Thinking && !r.SummaryMode {
 			out.InvalidContent = &envelope.Message.Content
 		}
 	}
 	if err = validate(content); err != nil {
 		code := "invalid_model_result"
 		switch err.Error() {
-		case "invalid_model_sources", "invalid_grouping_structure", "invalid_grouping_sources", "invalid_grouping_roles":
+		case "invalid_model_sources", "invalid_grouping_structure", "invalid_grouping_sources", "invalid_grouping_roles", "invalid_summary_structure", "invalid_summary_sources":
 			code = err.Error()
 		}
 		out.StructuralError = &code
@@ -342,7 +351,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	} else if envelope.Done == nil || !*envelope.Done || envelope.Reason == nil || *envelope.Reason != "stop" {
 		failure("ollama_incomplete_response")
 	}
-	if r.Thinking {
+	if r.Thinking || r.SummaryMode {
 		if out.Incomplete != nil && *out.Incomplete && out.Error == nil {
 			failure("ollama_incomplete_response")
 		}
