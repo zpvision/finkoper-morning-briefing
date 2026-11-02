@@ -34,11 +34,19 @@ func millis(p *int64) *float64 {
 func (o *Ollama) Generate(ctx context.Context, in Input) (*Result, Metrics, error) {
 	var m Metrics
 	system, user := PromptInput(in)
-	if _, err := checkBudget(ctx, o.Counter, system, user); err != nil {
-		return nil, m, err
+	countStart := time.Now()
+	_, countErr := checkBudget(ctx, o.Counter, system, user)
+	countMS := time.Since(countStart).Milliseconds()
+	m.BudgetHelper = &countMS
+	if countErr != nil {
+		return nil, m, countErr
 	}
-	if err := o.Counter.Verify(ctx, system, user); err != nil {
-		return nil, m, err
+	verifyStart := time.Now()
+	verifyErr := o.Counter.Verify(ctx, system, user)
+	verifyMS := time.Since(verifyStart).Milliseconds()
+	m.CompatibilityCheck = &verifyMS
+	if verifyErr != nil {
+		return nil, m, verifyErr
 	}
 	payload := map[string]any{"model": o.Model, "stream": false, "think": false, "truncate": false, "shift": false, "keep_alive": "30m", "format": json.RawMessage(OutputSchema), "options": map[string]any{"temperature": 0, "num_ctx": ContextTokens, "num_predict": OutputReserve}, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}}}
 	b, _ := json.Marshal(payload)

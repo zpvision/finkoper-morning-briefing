@@ -13,6 +13,8 @@
 
 ## Проверено
 
+2026-11-02, morning-v3: TestExternalSimulation с настоящим Python-helper PASS. Persisted job metrics и лог: processing_ms=2168, budget_helper_ms=792, compatibility_check_ms=1353. Проверки metadata/render-only остались активны, выполнена одна контролируемая генерация. Это локальный mock-прогон, не измерение серверной Ollama и не проверка смыслового качества нового промпта. Локальные входные counts нового промпта: 2391/1665/2370 для 01/02/04-exact-20; все помещаются с резервом 1500.
+
 2026-11-02, доработка бюджета: mock расширен /api/version, /api/tags, /api/show и render-only ответом /api/chat по предоставленному шаблону. TestExternalSimulation с BRIEFING_TEST_BUDGET_PYTHON PASS: настоящий Go → subprocess Python/tokenizers → HTTP mock, задание succeeded. Отдельно cmd/budget --verify --probe подтвердил искусственную пробу и все три входа (01,02,04-exact-20) против этого mock; input counts 1848/1122/1827. Проверки runtime в этом прогоне относятся только к локальному fixture, не к серверной Ollama. Обычные tests используют явно тестовый счётчик, доп. локальные tests — настоящий helper. Метрики Ollama в mock искусственные и не используются как доказательство точности подсчёта.
 
 2026-11-02: TestExternalSimulation PASS: HTTP 202, persisted job, worker вызвал зависимость, статус succeeded, один пункт с m1 и load_ms=0. В ndjson наблюдался request: routeKey=ollama, POST /api/chat, statusCode=200, responseSize=336. Других членов simulation нет. Это подтверждает совместимость приложения с данным fixture по реальному HTTP, не работу реального AI-сервера.

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const PromptVersion = "morning-v2"
+const PromptVersion = "morning-v3"
 const SchemaVersion = "topics-v1"
 const MaxBody = 1 << 20
 const QueueLimit = 100
@@ -45,14 +45,16 @@ type Result struct {
 	Topics []Topic `json:"topics"`
 }
 type Metrics struct {
-	QueueWait    *int64   `json:"queue_wait_ms"`
-	Processing   *int64   `json:"processing_ms"`
-	Total        *float64 `json:"ollama_total_ms"`
-	Load         *float64 `json:"ollama_load_ms"`
-	Prompt       *float64 `json:"prompt_eval_ms"`
-	Generation   *float64 `json:"generation_ms"`
-	InputTokens  *int64   `json:"input_tokens"`
-	OutputTokens *int64   `json:"output_tokens"`
+	QueueWait          *int64   `json:"queue_wait_ms"`
+	Processing         *int64   `json:"processing_ms"`
+	BudgetHelper       *int64   `json:"budget_helper_ms"`
+	CompatibilityCheck *int64   `json:"compatibility_check_ms"`
+	Total              *float64 `json:"ollama_total_ms"`
+	Load               *float64 `json:"ollama_load_ms"`
+	Prompt             *float64 `json:"prompt_eval_ms"`
+	Generation         *float64 `json:"generation_ms"`
+	InputTokens        *int64   `json:"input_tokens"`
+	OutputTokens       *int64   `json:"output_tokens"`
 }
 type Job struct {
 	ID            string    `json:"job_id"`

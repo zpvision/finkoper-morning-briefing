@@ -63,6 +63,13 @@ func Run(ctx context.Context, s *Store, o *Ollama) error {
 		if saveErr != nil {
 			return errors.New("worker_persist_failed")
 		}
-		slog.Info("job_finished", "job_id", j.ID, "status", j.Status, "processing_ms", elapsed)
+		attrs := []any{"job_id", j.ID, "status", j.Status, "processing_ms", elapsed}
+		if metrics.BudgetHelper != nil {
+			attrs = append(attrs, "budget_helper_ms", *metrics.BudgetHelper)
+		}
+		if metrics.CompatibilityCheck != nil {
+			attrs = append(attrs, "compatibility_check_ms", *metrics.CompatibilityCheck)
+		}
+		slog.Info("job_finished", attrs...)
 	}
 }

@@ -369,7 +369,7 @@ func TestExternalSimulation(t *testing.T) {
 			t.Fatal(got.Error)
 		}
 		if got.Status == "succeeded" {
-			if got.Result == nil || len(got.Result.Topics) != 1 || got.Metrics.Load == nil || *got.Metrics.Load != 0 {
+			if got.Result == nil || len(got.Result.Topics) != 1 || got.Metrics.Load == nil || *got.Metrics.Load != 0 || got.Metrics.BudgetHelper == nil || got.Metrics.CompatibilityCheck == nil {
 				t.Fatal("unexpected simulation result")
 			}
 			return

@@ -582,6 +582,16 @@
               "output_tokens": {
                 "type": "integer",
                 "nullable": true
+              },
+              "budget_helper_ms": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Worker budget-check wall time: slot wait, Python startup, resource checks, tokenizer loading and count. Null if not executed; measured zero is 0. Excludes request admission/startup probe."
+              },
+              "compatibility_check_ms": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Worker Verify wall time before generation, including its Python subprocess and metadata/render-only HTTP checks. Null if not executed; persisted even on verification failure. No generation on failure."
               }
             }
           }
