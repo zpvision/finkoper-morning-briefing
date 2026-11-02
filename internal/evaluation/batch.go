@@ -1,4 +1,4 @@
-// Package evaluation runs synthetic inputs only. It never reads annotations.
+// Package evaluation provides standalone and synthetic diagnostic runners, without reading annotations.
 package evaluation
 
 import (

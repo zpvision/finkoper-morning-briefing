@@ -29,6 +29,12 @@ func Test14BProfileIsExplicitPinnedAndIsolated(t *testing.T) {
 	if ConfigureProfile(counter, "anything", dir, "think-false", "development") == nil {
 		t.Fatal("unknown profile")
 	}
+	if ConfigureFileProfile(counter, Profile14B, dir) != nil {
+		t.Fatal("standalone pin rejected")
+	}
+	if ConfigureFileProfile(counter, Profile8B, dir) == nil {
+		t.Fatal("standalone profile must be explicit 14B")
+	}
 	t.Setenv("OLLAMA_MODEL", "qwen3:8b")
 	if ConfigureProfile(counter, Profile14B, dir, "think-false", "development") == nil {
 		t.Fatal("environment conflict")

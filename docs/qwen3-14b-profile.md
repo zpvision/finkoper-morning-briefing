@@ -1,6 +1,6 @@
 # Диагностический профиль qwen3:14b-q4_K_M
 
-Профиль `qwen3-14b-q4-k-m-v1` доступен только через явный `evaluate-batch --profile`. Это не переключение рабочего API. Его первоначальная область — development, think=false, morning-v3, topics-v1; другие режимы/holdout отклоняются. Контекст 8192, резерв ответа 1500, temperature=0, timeout 120s, stream=false, keep_alive=30m, shift=false, truncate=false. Нет повторов, repair и обрезки.
+В `evaluate-batch` профиль `qwen3-14b-q4-k-m-v1` выбирается явно через --profile; его область остаётся development, think=false, morning-v3, topics-v1, другие режимы/holdout отклоняются. [Отдельная команда diagnose-files](standalone-14b-files.md) использует тот же pin для произвольных входных файлов, не присваивая им split. Это не переключение рабочего API. Контекст 8192, резерв ответа 1500, temperature=0, timeout 120s, stream=false, keep_alive=30m, shift=false, truncate=false. Нет повторов, repair и обрезки.
 
 ## Что подтверждено локально
 

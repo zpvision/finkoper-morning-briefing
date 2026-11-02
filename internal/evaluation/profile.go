@@ -32,25 +32,38 @@ func ConfigureProfile(counter *briefing.PythonCounter, profile, resources, mode,
 		if mode != "think-false" || split != "development" {
 			return errors.New("14b_initial_profile_requires_development_think_false")
 		}
-		if value := os.Getenv("OLLAMA_MODEL"); value != "" && value != Model14B {
-			return errors.New("OLLAMA_MODEL_conflicts_with_diagnostic_profile")
-		}
-		if resources == "" {
-			resources = "resources/tokenizer/qwen3-14b"
-		}
-		absolute, err := filepath.Abs(resources)
-		if err != nil {
-			return errors.New("invalid_profile_resources")
-		}
-		raw, err := os.ReadFile(filepath.Join(absolute, "manifest.json"))
-		if err != nil || diagnostic.Hash(string(raw)) != diagnostic.Hash(string(profile14Manifest)) {
-			return errors.New("diagnostic_profile_manifest_mismatch")
-		}
-		counter.Model = Model14B
-		counter.Resources = absolute
-		counter.DiagnosticProfile = Profile14B
+		return configure14BResources(counter, resources)
 	default:
 		return errors.New("unknown_diagnostic_profile")
 	}
+	return nil
+}
+
+// ConfigureFileProfile selects the existing pin without assigning files to a dataset split.
+func ConfigureFileProfile(counter *briefing.PythonCounter, profile, resources string) error {
+	if profile != Profile14B {
+		return errors.New("standalone_files_require_explicit_14b_profile")
+	}
+	return configure14BResources(counter, resources)
+}
+
+func configure14BResources(counter *briefing.PythonCounter, resources string) error {
+	if value := os.Getenv("OLLAMA_MODEL"); value != "" && value != Model14B {
+		return errors.New("OLLAMA_MODEL_conflicts_with_diagnostic_profile")
+	}
+	if resources == "" {
+		resources = "resources/tokenizer/qwen3-14b"
+	}
+	absolute, err := filepath.Abs(resources)
+	if err != nil {
+		return errors.New("invalid_profile_resources")
+	}
+	raw, err := os.ReadFile(filepath.Join(absolute, "manifest.json"))
+	if err != nil || diagnostic.Hash(string(raw)) != diagnostic.Hash(string(profile14Manifest)) {
+		return errors.New("diagnostic_profile_manifest_mismatch")
+	}
+	counter.Model = Model14B
+	counter.Resources = absolute
+	counter.DiagnosticProfile = Profile14B
 	return nil
 }
