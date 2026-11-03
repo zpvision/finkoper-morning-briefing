@@ -1,0 +1,125 @@
+{
+  "profile": "qwen35-9b-summary-v2-v1",
+  "model": "qwen3.5:9b",
+  "model_digest": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90",
+  "ollama_version": "0.40.5",
+  "ollama_commit": "d919272e53593d1d55d40e1180eaa06dfbede3ac",
+  "hf_repository": "Qwen/Qwen3.5-9B",
+  "hf_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+  "llamacpp_commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+  "renderer": "qwen3.5",
+  "parser": "qwen3.5",
+  "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+  "tokenizer_metadata_sha256": "b90f312538ac34164b6a3455061e481c65c90c07af254f9dbf21f407f76cca36",
+  "architecture": "qwen35",
+  "pre_tokenizer": "qwen35",
+  "vocabulary_entries": 248320,
+  "merges": 247587,
+  "normalization": "none (GGUF BPE path; official HF NFC disabled in memory)",
+  "budget_method": "qwen35_tokenizers_pinned_renderer_no_normalization",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    "presence_penalty": 1.5,
+    "repeat_penalty": 1
+  },
+  "sources": {
+    "ollama__model__renderers__qwen35.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/model/renderers/qwen35.go",
+      "sha256": "69bca99b53a3db8d599bb9ec8eadf65ce9a72868566a89bfac44d31fe3b565e0",
+      "bytes": 11201
+    },
+    "ollama__model__renderers__renderer.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/model/renderers/renderer.go",
+      "sha256": "f6ade5dac832fe6814ffb987bf3d142881fdd7a861851628ca555276fb143c09",
+      "bytes": 3718
+    },
+    "ollama__model__renderers__image_tags.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/model/renderers/image_tags.go",
+      "sha256": "4a94f0ba425516f5393d7c613d6a6b40ab0b126bedf52cbdfa8a473699069607",
+      "bytes": 1019
+    },
+    "ollama__model__parsers__qwen35.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/model/parsers/qwen35.go",
+      "sha256": "c369a5220e11c89f32ed6efce659c7c735f7b10490606015b23a89b77cc54405",
+      "bytes": 7660
+    },
+    "ollama__server__routes.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/server/routes.go",
+      "sha256": "47c0bce03da44ba50c65e436f61538c67457282b9504a1ecc11d090461120855",
+      "bytes": 107175
+    },
+    "ollama__server__prompt.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/server/prompt.go",
+      "sha256": "79411c4e15ff27fb8bac4dcd96076407e035ec407c0ab1a1840035f9668b4654",
+      "bytes": 4362
+    },
+    "ollama__server__renderer_resolution.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/server/renderer_resolution.go",
+      "sha256": "d86864240d854d3955f7b575fbb0a7b34f27abafa5c2daa98083538cf9f6c789",
+      "bytes": 2242
+    },
+    "ollama__api__types.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/api/types.go",
+      "sha256": "e19aafa5065afa3ed058df9135d200527391e012349ed5955dd0cc09c0b33f7a",
+      "bytes": 44473
+    },
+    "ollama__llm__llama_server.go.source": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/llm/llama_server.go",
+      "sha256": "be96301d662bf18527fe0d481c15a4631ff47055c6db7ce1400feb264315c6bf",
+      "bytes": 91649
+    },
+    "ollama__llama__server__CMakeLists.txt": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/llama/server/CMakeLists.txt",
+      "sha256": "59734d4dd425f9c36ca3fdf081a3233a1edc33fa285350b2f601890ff289560f",
+      "bytes": 29227
+    },
+    "ollama__llama__compat__001-llama-cpp-hooks.patch": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/llama/compat/001-llama-cpp-hooks.patch",
+      "sha256": "de62fe6dd48c1b19082ae234e0b21fbc3da326dc18d6c971b93953886bf3ebf7",
+      "bytes": 4903
+    },
+    "ollama__LLAMA_CPP_VERSION": {
+      "url": "https://raw.githubusercontent.com/ollama/ollama/d919272e53593d1d55d40e1180eaa06dfbede3ac/LLAMA_CPP_VERSION",
+      "sha256": "0bbf7c261e41e777ad8d70f2c83f8d7dd2ae4d7e41a9b6f26926fbc902209c70",
+      "bytes": 7
+    },
+    "llamacpp__src__llama-vocab.cpp": {
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/620d2225cc436ab0b001e3200e590e3b286ef9ab/src/llama-vocab.cpp",
+      "sha256": "ff2ec59299af84c51814020169177302003d8c14cdd30f2c44f333359bc17b41",
+      "bytes": 194304
+    },
+    "llamacpp__tools__server__server-context.cpp": {
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/620d2225cc436ab0b001e3200e590e3b286ef9ab/tools/server/server-context.cpp",
+      "sha256": "4ed2e401a9e566b2caf2dd208582fbd42a6b230d516b1b9d56be130cbad3caa6",
+      "bytes": 263836
+    },
+    "tokenizer.json": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/tokenizer.json",
+      "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "bytes": 12807982
+    },
+    "tokenizer_config.json": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/tokenizer_config.json",
+      "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+      "bytes": 16710
+    },
+    "chat_template.jinja": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/chat_template.jinja",
+      "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "bytes": 7756
+    },
+    "config.json": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/config.json",
+      "sha256": "d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05",
+      "bytes": 3126
+    },
+    "README.md": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/README.md",
+      "sha256": "c5f5a8c2dddab69cfbf05279235aa5fddb137939a06539c4c7637aa900fef6d0",
+      "bytes": 77643
+    }
+  }
+}

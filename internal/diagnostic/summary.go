@@ -104,6 +104,10 @@ func SummaryComparisonVariants(pair string) ([]Variant, error) {
 }
 
 func (r *Runner) SummarizeVersion(ctx context.Context, file string, in briefing.Input, version string, run bool) Record {
+	if r.Qwen35Profile && version != SummaryPromptVersionV2 {
+		code := "qwen35_requires_frozen_summary_v2"
+		return Record{File: file, Model: r.Model, Error: &code}
+	}
 	if !r.SummaryMode {
 		code := "summary_runner_not_configured"
 		return Record{File: file, Model: r.Model, Error: &code}

@@ -1,5 +1,7 @@
 # Утренний обзор FinKoper
 
+[Отдельный профиль Qwen3.5 9B](docs/qwen35-9b-profile.md): замороженный diagnostic-summary-v2/summary-v1, собственные tokenizer/renderer и sampling, план без сети, проверка совместимости без генерации и одиночная проба только с `--run`. Рабочая 8B не переключается; runtime-совместимость и качество требуют ручной проверки.
+
 [Диагностика «кто написал и что хотел»](docs/summary-diagnostics.md): промпт diagnostic-summary-v4, схема summary-v1, 8B/think=false, резерв 1000. В существующем compare-summary есть [явная пара v2/v4](docs/summary-v4-comparison.md); замороженная v2/v3 сохранена. Используются регрессионные данные, прежний holdout уже не независимый. Рабочий API не переключается, обычный diagnose-summary по умолчанию остаётся development и планом без сети.
 
 [Отдельные входные файлы на 14B](docs/standalone-14b-files.md): `diagnose-files` с явным профилем, планом без сети и одним вызовом на файл только с --run. Файлы не включаются в development/holdout.

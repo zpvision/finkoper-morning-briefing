@@ -58,11 +58,12 @@ type PythonCounter struct {
 	Python, Script, Resources, BaseURL, Model string
 	Timeout                                   time.Duration
 	// Explicit diagnostic-only opt-in; never set by service configuration.
-	DiagnosticThinking bool
-	DiagnosticSummary  bool   // CLI-only summary reserve=1000; production default is unchanged.
-	DiagnosticProfile  string // Explicit CLI-only profile, never set by service configuration.
-	slot               chan struct{}
-	verified           atomic.Bool
+	DiagnosticThinking     bool
+	DiagnosticSummary      bool   // CLI-only summary reserve=1000; production default is unchanged.
+	DiagnosticProfile      string // Explicit CLI-only profile, never set by service configuration.
+	DiagnosticBudgetMethod string // Explicit diagnostic factory only; default remains the 8B method.
+	slot                   chan struct{}
+	verified               atomic.Bool
 }
 
 func NewPythonCounter() (*PythonCounter, error) {
@@ -107,8 +108,18 @@ func (b *limitedOutput) Write(p []byte) (int, error) {
 }
 
 var helperCodes = map[string]bool{
-	"budget_python_requires_venv": true,
-	"tokenizers_version_mismatch": true, "invalid_tokenizer_manifest": true, "tokenizer_checksum_mismatch": true,
+	"qwen35_manifest_pin_mismatch": true, "qwen35_resource_checksum_mismatch": true, "qwen35_requires_tokenizers_0_22_1_venv": true,
+	"qwen35_unsupported_outer_whitespace": true, "qwen35_model_metadata_mismatch": true, "qwen35_model_digest_mismatch": true,
+	"qwen35_ollama_version_mismatch": true, "qwen35_invalid_base_url": true, "qwen35_verification_request_failed": true,
+	"qwen35_render_only_missing_rendered_template": true, "qwen35_runtime_renderer_mismatch": true, "qwen35_helper_failed": true,
+	"qwen35_unexpected_media":                      true,
+	"qwen35_verification_request_failed_HTTPError": true, "qwen35_verification_request_failed_URLError": true,
+	"qwen35_verification_request_failed_TimeoutError": true, "qwen35_verification_request_failed_ConnectionResetError": true,
+	"qwen35_verification_request_failed_IncompleteRead": true, "qwen35_verification_request_failed_JSONDecodeError": true,
+	"qwen35_verification_request_failed_UnicodeDecodeError": true, "qwen35_verification_request_failed_ValueError": true,
+	"qwen35_verification_request_failed_other": true,
+	"budget_python_requires_venv":              true,
+	"tokenizers_version_mismatch":              true, "invalid_tokenizer_manifest": true, "tokenizer_checksum_mismatch": true,
 	"invalid_ollama_url": true, "ollama_verification_response_too_large": true, "ollama_verification_invalid_response": true,
 	"ollama_verification_request_failed": true, "context_renderer_ollama_version_not_validated": true,
 	"context_tokenizer_model_not_validated": true, "context_chat_template_changed": true,
@@ -198,7 +209,11 @@ func (p *PythonCounter) Verify(ctx context.Context, system, user string) error {
 		p.verified.Store(false)
 		return err
 	}
-	if !result.Verified || result.Version != "0.40.5" || len(result.Digest) != 64 || len(result.Template) != 64 || result.Method != BudgetMethod {
+	expectedMethod := BudgetMethod
+	if p.DiagnosticBudgetMethod != "" {
+		expectedMethod = p.DiagnosticBudgetMethod
+	}
+	if !result.Verified || result.Version != "0.40.5" || len(result.Digest) != 64 || len(result.Template) != 64 || result.Method != expectedMethod {
 		p.verified.Store(false)
 		return errors.New("budget_helper_invalid_response")
 	}

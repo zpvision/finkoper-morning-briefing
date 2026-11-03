@@ -37,40 +37,41 @@ func Variants() []Variant {
 func Hash(s string) string { sum := sha256.Sum256([]byte(s)); return hex.EncodeToString(sum[:]) }
 
 type Record struct {
-	File                   string           `json:"file"`
-	Variant                string           `json:"variant"`
-	Mode                   string           `json:"mode"`
-	PromptVersion          string           `json:"prompt_version"`
-	PromptHash             string           `json:"prompt_sha256"`
-	UserHash               string           `json:"user_json_sha256"`
-	MessagesHash           string           `json:"messages_sha256"`
-	FormatHash             string           `json:"format_sha256"`
-	RequestHash            string           `json:"request_sha256"`
-	RenderedHash           *string          `json:"rendered_prompt_sha256"`
-	SystemPreserved        *bool            `json:"rendered_system_preserved"`
-	SystemBytes            int              `json:"system_bytes"`
-	UserBytes              int              `json:"user_json_bytes"`
-	Format                 string           `json:"format"`
-	Model                  string           `json:"model"`
-	Parameters             map[string]any   `json:"parameters"`
-	Budget                 briefing.Budget  `json:"budget"`
-	Metrics                briefing.Metrics `json:"metrics"`
-	HTTPMS                 *int64           `json:"ollama_http_ms"`
-	FormatRenderMS         *int64           `json:"format_render_check_ms"`
-	TokenDifference        *int64           `json:"prompt_eval_count_minus_local"`
-	GenerationAttempts     int              `json:"generation_attempts"`
-	Done                   *bool            `json:"done"`
-	DoneReason             *string          `json:"done_reason"`
-	Result                 json.RawMessage  `json:"result"`
-	InvalidContent         *string          `json:"invalid_json_content,omitempty"`
-	StructuralError        *string          `json:"structural_validation_error"`
-	Error                  *string          `json:"error"`
-	ThinkingPresent        *bool            `json:"thinking_present,omitempty"`
-	ThinkingBytes          *int             `json:"thinking_bytes,omitempty"`
-	FinalContentBytes      *int             `json:"final_content_bytes,omitempty"`
-	Incomplete             *bool            `json:"incomplete,omitempty"`
-	GenerationLimitReached *bool            `json:"generation_limit_reached,omitempty"`
-	ComparisonNote         string           `json:"comparison_note,omitempty"`
+	File                      string           `json:"file"`
+	Variant                   string           `json:"variant"`
+	Mode                      string           `json:"mode"`
+	PromptVersion             string           `json:"prompt_version"`
+	PromptHash                string           `json:"prompt_sha256"`
+	UserHash                  string           `json:"user_json_sha256"`
+	MessagesHash              string           `json:"messages_sha256"`
+	FormatHash                string           `json:"format_sha256"`
+	RequestHash               string           `json:"request_sha256"`
+	RenderedHash              *string          `json:"rendered_prompt_sha256"`
+	SystemPreserved           *bool            `json:"rendered_system_preserved"`
+	SystemBytes               int              `json:"system_bytes"`
+	UserBytes                 int              `json:"user_json_bytes"`
+	Format                    string           `json:"format"`
+	Model                     string           `json:"model"`
+	Parameters                map[string]any   `json:"parameters"`
+	Budget                    briefing.Budget  `json:"budget"`
+	Metrics                   briefing.Metrics `json:"metrics"`
+	HTTPMS                    *int64           `json:"ollama_http_ms"`
+	FormatRenderMS            *int64           `json:"format_render_check_ms"`
+	TokenDifference           *int64           `json:"prompt_eval_count_minus_local"`
+	GenerationAttempts        int              `json:"generation_attempts"`
+	Done                      *bool            `json:"done"`
+	DoneReason                *string          `json:"done_reason"`
+	Result                    json.RawMessage  `json:"result"`
+	InvalidContent            *string          `json:"invalid_json_content,omitempty"`
+	StructuralError           *string          `json:"structural_validation_error"`
+	Error                     *string          `json:"error"`
+	ThinkingPresent           *bool            `json:"thinking_present,omitempty"`
+	ThinkingBytes             *int             `json:"thinking_bytes,omitempty"`
+	FinalContentBytes         *int             `json:"final_content_bytes,omitempty"`
+	Incomplete                *bool            `json:"incomplete,omitempty"`
+	GenerationLimitReached    *bool            `json:"generation_limit_reached,omitempty"`
+	ComparisonNote            string           `json:"comparison_note,omitempty"`
+	RuntimeTokenCountVerified *bool            `json:"runtime_token_count_verified,omitempty"`
 }
 
 type Runner struct {
@@ -80,6 +81,7 @@ type Runner struct {
 	Thinking       bool
 	SummaryMode    bool // Separate diagnostic contract, reserve=1000; never used by API.
 	VerifyOnly     bool // Explicit diagnostic check: render and metadata, no generation.
+	Qwen35Profile  bool // Pinned diagnostic profile, separate tokenizer/renderer from 8B.
 }
 
 func NewRunner(base, model string, timeout time.Duration, counter briefing.BudgetCounter) *Runner {
@@ -97,6 +99,10 @@ func ExpectedRender(system, user string, thinking ...bool) string {
 }
 func safeHelperError(err error, fallback string) string {
 	switch err.Error() {
+	case "qwen35_verification_request_failed_HTTPError", "qwen35_verification_request_failed_URLError", "qwen35_verification_request_failed_TimeoutError", "qwen35_verification_request_failed_ConnectionResetError", "qwen35_verification_request_failed_IncompleteRead", "qwen35_verification_request_failed_JSONDecodeError", "qwen35_verification_request_failed_UnicodeDecodeError", "qwen35_verification_request_failed_ValueError", "qwen35_verification_request_failed_other":
+		return err.Error()
+	case "qwen35_manifest_pin_mismatch", "qwen35_resource_checksum_mismatch", "qwen35_requires_tokenizers_0_22_1_venv", "qwen35_unsupported_outer_whitespace", "qwen35_model_metadata_mismatch", "qwen35_model_digest_mismatch", "qwen35_ollama_version_mismatch", "qwen35_invalid_base_url", "qwen35_verification_request_failed", "qwen35_render_only_missing_rendered_template", "qwen35_runtime_renderer_mismatch", "qwen35_helper_failed", "qwen35_unexpected_media":
+		return err.Error()
 	case "tokenizer_checksum_mismatch", "tokenizers_version_mismatch", "budget_python_requires_venv", "invalid_tokenizer_manifest", "budget_helper_timeout", "budget_helper_failed", "context_renderer_ollama_version_not_validated", "context_tokenizer_model_not_validated", "context_chat_template_changed", "context_render_only_unavailable", "context_chat_render_mismatch", "ollama_verification_request_failed", "ollama_verification_invalid_response":
 		return err.Error()
 	}
@@ -160,6 +166,9 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		reserve = 4096
 		options = map[string]any{"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0, "num_ctx": 8192, "num_predict": reserve}
 	}
+	if r.Qwen35Profile {
+		options = Qwen35Options()
+	}
 	params := map[string]any{"stream": false, "think": r.Thinking, "truncate": false, "shift": false, "keep_alive": "30m", "options": options}
 	if r.Thinking {
 		params["timeout_ms"] = 180000
@@ -181,9 +190,16 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
-	if r.SummaryMode && (r.Model != "qwen3:8b" || r.Thinking) {
+	if r.Qwen35Profile && (!r.SummaryMode || r.Thinking || r.Model != Qwen35Model) {
+		failure("invalid_qwen35_diagnostic_profile")
+		return
+	}
+	if r.SummaryMode && ((!r.Qwen35Profile && r.Model != "qwen3:8b") || r.Thinking) {
 		failure("summary_requires_qwen3_8b_think_false")
 		return
+	}
+	if r.Qwen35Profile {
+		out.ComparisonNote = "Same frozen diagnostic-summary-v2/schema; compared with 8B, model, tokenizer, renderer and sampling change (temperature 0 -> 0.7, top_p=0.8, top_k=20, min_p=0, presence_penalty=1.5, repeat_penalty=1). Render/model check is not runtime token-count confirmation."
 	}
 	if r.Thinking {
 		out.ComparisonNote = "Compared with A: think, sampling, generation reserve and timeout change; this does not isolate think alone."
@@ -210,7 +226,11 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure(safeHelperError(err, "diagnostic_budget_failed"))
 		return
 	}
-	if budget.InputTokens < 0 || budget.OutputReserve != reserve || budget.ContextTokens != briefing.ContextTokens || budget.RequiredTokens != budget.InputTokens+reserve || budget.RemainingTokens != briefing.ContextTokens-budget.RequiredTokens || budget.Method != briefing.BudgetMethod {
+	expectedMethod := briefing.BudgetMethod
+	if r.Qwen35Profile {
+		expectedMethod = Qwen35BudgetMethod
+	}
+	if budget.InputTokens < 0 || budget.OutputReserve != reserve || budget.ContextTokens != briefing.ContextTokens || budget.RequiredTokens != budget.InputTokens+reserve || budget.RemainingTokens != briefing.ContextTokens-budget.RequiredTokens || budget.Method != expectedMethod {
 		failure("budget_helper_invalid_response")
 		return
 	}
@@ -242,7 +262,11 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	}
 	renderHash := Hash(rendered)
 	out.RenderedHash = &renderHash
-	preserved := rendered == ExpectedRender(v.Prompt, user, r.Thinking)
+	expectedRender := ExpectedRender(v.Prompt, user, r.Thinking)
+	if r.Qwen35Profile {
+		expectedRender = Qwen35Render(v.Prompt, user)
+	}
+	preserved := rendered == expectedRender
 	out.SystemPreserved = &preserved
 	if !preserved {
 		failure("context_chat_render_mismatch")
@@ -318,7 +342,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		out.TokenDifference = &diff
 	}
 	content := []byte(envelope.Message.Content)
-	if r.Thinking {
+	if r.Thinking || r.Qwen35Profile {
 		present := len(envelope.Message.Thinking) > 0
 		size := len(envelope.Message.Thinking)
 		contentSize := len(content)
@@ -350,6 +374,17 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		failure("ollama_error")
 	} else if envelope.Done == nil || !*envelope.Done || envelope.Reason == nil || *envelope.Reason != "stop" {
 		failure("ollama_incomplete_response")
+	}
+	if r.Qwen35Profile {
+		verified := false
+		out.RuntimeTokenCountVerified = &verified
+		if envelope.Input == nil && out.Error == nil {
+			failure("qwen35_runtime_prompt_eval_count_missing")
+		} else if envelope.Input != nil && *envelope.Input != int64(budget.InputTokens) && out.Error == nil {
+			failure("qwen35_runtime_token_count_mismatch")
+		} else if envelope.Input != nil && *envelope.Input == int64(budget.InputTokens) {
+			verified = true
+		}
 	}
 	if r.Thinking || r.SummaryMode {
 		if out.Incomplete != nil && *out.Incomplete && out.Error == nil {
