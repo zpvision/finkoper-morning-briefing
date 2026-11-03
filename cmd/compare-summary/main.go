@@ -1,4 +1,4 @@
-// Frozen v2 versus v3, sequentially, with no network unless --run is explicit.
+// Explicit summary pair, sequentially, with no network unless --run is explicit.
 package main
 
 import (
@@ -28,10 +28,14 @@ func main() {
 func run(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("compare-summary", flag.ContinueOnError)
 	set := flags.String("set", "regressions", "regressions (8 new + 10 previously used holdout), new-regressions, previous-holdout, development, examples")
-	execute := flags.Bool("run", false, "one v2 and one v3 generation per input, sequential, no retries")
+	pair := flags.String("pair", "v2-v3", "v2-v3 (default) or v2-v4")
+	execute := flags.Bool("run", false, "one generation per selected version and input, sequential, no retries")
 	out := flags.String("out", "", "new .jsonl file, default stdout")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return errors.New("invalid_summary_comparison_arguments")
+	}
+	if _, err := diagnostic.SummaryComparisonVariants(*pair); err != nil {
+		return err
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
 		return errors.New("summary_comparison_report_requires_jsonl")
@@ -72,7 +76,7 @@ func run(args []string, output io.Writer) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	result := evaluation.CompareSummaries(ctx, selection, diagnostic.NewSummaryRunner(counter.BaseURL, counter), metadata.Digest, diagnostic.Hash(string(raw)), *execute, output)
+	result := evaluation.CompareSummaries(ctx, selection, diagnostic.NewSummaryRunner(counter.BaseURL, counter), metadata.Digest, diagnostic.Hash(string(raw)), *execute, output, *pair)
 	if file != nil && file.Sync() != nil {
 		return errors.New("summary_comparison_report_sync_failed")
 	}

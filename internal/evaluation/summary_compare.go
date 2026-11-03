@@ -84,6 +84,7 @@ func LoadSummaryComparison(root, set string) (SummarySelection, error) {
 type SummaryComparisonRecord struct {
 	diagnostic.Record
 	Selection             string    `json:"selection"`
+	Comparison            string    `json:"comparison"`
 	SelectionHash         string    `json:"selection_sha256"`
 	AssessmentRole        string    `json:"assessment_role"`
 	InputFileHash         string    `json:"input_file_sha256"`
@@ -96,19 +97,31 @@ type SummaryComparisonRecord struct {
 	RecordedAt            time.Time `json:"recorded_at"`
 }
 
-func CompareSummaries(ctx context.Context, selection SummarySelection, runner *diagnostic.Runner, digest, tokenizerHash string, execute bool, output io.Writer) error {
+func CompareSummaries(ctx context.Context, selection SummarySelection, runner *diagnostic.Runner, digest, tokenizerHash string, execute bool, output io.Writer, pairOption ...string) error {
+	pair := "v2-v3"
+	if len(pairOption) > 1 {
+		return errors.New("unknown_summary_comparison_pair")
+	}
+	if len(pairOption) == 1 {
+		pair = pairOption[0]
+	}
+	variants, err := diagnostic.SummaryComparisonVariants(pair)
+	if err != nil {
+		return err
+	}
 	if runner == nil || !runner.SummaryMode || runner.Thinking || runner.Model != "qwen3:8b" || runner.VerifyOnly {
 		return errors.New("invalid_summary_comparison_runner")
 	}
 	encoder := json.NewEncoder(output)
 	failed := false
 	for i, input := range selection.Inputs {
-		for j, variant := range diagnostic.SummaryVariants() {
+		for j, variant := range variants {
 			if ctx.Err() != nil {
 				return errors.New("summary_comparison_cancelled")
 			}
 			record := runner.SummarizeVersion(ctx, input.File, input.Input, variant.PromptVersion, execute)
 			entry := SummaryComparisonRecord{Record: record, Selection: selection.Name, SelectionHash: selection.Hash, AssessmentRole: "regression", InputFileHash: input.Hash, SchemaVersion: diagnostic.SummarySchemaVersion, ExpectedModelDigest: digest, TokenizerManifestHash: tokenizerHash, PairIndex: i + 1, VersionIndex: j + 1, RecordedAt: time.Now().UTC()}
+			entry.Comparison = pair
 			if selection.Name == "development" {
 				entry.AssessmentRole = "development"
 			}

@@ -1,8 +1,8 @@
 # Диагностика «кто написал и что хотел»
 
-Текущая диагностическая версия — v3; [отдельное сравнение замороженного v2 и v3](summary-v2-v3-comparison.md). Ранее использованный holdout теперь считается регрессионным, не независимым. Используйте --set regression; --set holdout сохранён как alias, в отчёте input_scope=regression. Формат summary-v1 и рабочий API не меняются.
+Текущая диагностическая версия — [v4 с минимальным перефразированием и сравнением v2/v4](summary-v4-comparison.md); [замороженная пара v2/v3](summary-v2-v3-comparison.md) также сохранена. Ранее использованный holdout теперь считается регрессионным, не независимым. Используйте --set regression; --set holdout сохранён как alias, в отчёте input_scope=regression. Формат summary-v1 и рабочий API не меняются.
 
-Отдельная команда `cmd/diagnose-summary`, промпт `diagnostic-summary-v3`, схема `summary-v1`:
+Отдельная команда `cmd/diagnose-summary`, промпт `diagnostic-summary-v4`, схема `summary-v1`:
 
 ```json
 {"summary":"Связная сводка на русском","source_message_ids":["id"]}

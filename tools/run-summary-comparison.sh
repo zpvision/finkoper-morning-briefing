@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 # Operator-only comparison in a new HOME directory; never touches service installations.
 set -euo pipefail
+export PATH="/snap/bin:$PATH"
 umask 077
-commit=${1:?Usage: bash tools/run-summary-comparison.sh FULL_COMMIT [SET]}
+commit=${1:?Usage: bash tools/run-summary-comparison.sh FULL_COMMIT [SET] [PAIR]}
 selection=${2:-regressions}
+pair=${3:-v2-v3}
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { printf 'Expected full commit SHA\n' >&2; exit 2; }
 case "$selection" in regressions|new-regressions|previous-holdout|development|examples) ;; *) exit 2 ;; esac
+case "$pair" in v2-v3|v2-v4) ;; *) exit 2 ;; esac
 for command_name in git go python3; do command -v "$command_name" >/dev/null; done
 work=$(mktemp -d "$HOME/finkoper-summary-comparison.XXXXXX")
+report="$work/comparison.jsonl"
+finish() {
+  run_exit=$?
+  trap - EXIT
+  printf 'commit=%s\nselection=%s\npair=%s\nreport=%s\nexit=%s\n' "$commit" "$selection" "$pair" "$report" "$run_exit"
+  exit "$run_exit"
+}
+trap finish EXIT
 git clone --no-checkout https://github.com/zpvision/finkoper-morning-briefing.git "$work/src"
 git -C "$work/src" checkout --detach "$commit"
 test "$(git -C "$work/src" rev-parse HEAD)" = "$commit"
@@ -29,10 +40,9 @@ compare() {
     BRIEFING_BUDGET_HELPER="$work/src/tools/context_budget/helper.py" \
     BRIEFING_TOKENIZER_DIR="$work/tokenizer" BRIEFING_BUDGET_TIMEOUT=60s \
     OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=qwen3:8b \
-    "$work/compare-summary" --set "$selection" "$@"
+    "$work/compare-summary" --pair "$pair" --set "$selection" "$@"
 }
 compare --out "$work/plan.jsonl"
 status=0
-compare --run --out "$work/comparison.jsonl" || status=$?
-printf 'commit=%s\nselection=%s\nreport=%s\nexit=%s\n' "$commit" "$selection" "$work/comparison.jsonl" "$status"
+compare --run --out "$report" || status=$?
 exit "$status"
