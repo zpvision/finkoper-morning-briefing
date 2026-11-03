@@ -103,9 +103,9 @@ def mode_config(manifest, mode):
     options = dict(manifest["sampling"], num_ctx=8192, num_predict=1000)
     if mode == "greedy":
         options.update(temperature=0, presence_penalty=0)
-    elif mode == "thinking":
+    elif mode in ("thinking", "thinking-long"):
         # Pinned official Qwen3.5-9B README: thinking mode for general tasks.
-        options.update(temperature=1.0, top_p=0.95, num_predict=4096)
+        options.update(temperature=1.0, top_p=0.95, num_predict=6144 if mode == "thinking-long" else 4096)
     elif mode != "baseline":
         raise ProfileError("invalid_qwen35_mode")
-    return mode == "thinking", options
+    return mode in ("thinking", "thinking-long"), options

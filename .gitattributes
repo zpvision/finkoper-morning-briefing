@@ -2,5 +2,6 @@ internal/evaluation/profiles/*.json text eol=lf
 internal/diagnostic/profiles/*.json text eol=lf
 scripts/qwen35-profile-probe.sh text eol=lf
 scripts/qwen35-mode-comparison.sh text eol=lf
+scripts/qwen35-thinking-long.sh text eol=lf
 tools/run-summary-holdout.sh text eol=lf
 tools/run-summary-comparison.sh text eol=lf

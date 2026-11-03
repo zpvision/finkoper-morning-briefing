@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 import unittest
+import contextlib
+import io
+import shutil
+import tempfile
 
 from qwen35_profile import ProfileError, load_files, pin, render, validate_exports, mode_config
 
@@ -62,6 +66,32 @@ class Qwen35AssetTests(unittest.TestCase):
         self.assertEqual(tokens,tokenizer.encode(render("system",'{"text":"проверка"}',True),add_special_tokens=False).ids)
         _, plain = count(RESOURCES,"system",'{"text":"проверка"}', False)
         self.assertNotEqual(tokens,plain)
+        long_thinking, long_options = mode_config(manifest, "thinking-long")
+        self.assertTrue(long_thinking)
+        options["num_predict"] = 6144
+        self.assertEqual(long_options, options)
+
+    def test_read_only_resource_verifier(self):
+        from verify_qwen35 import main
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(["--resources",str(RESOURCES),"--show",str(ROOT/"qwen35-9b-show.json"),"--tags",str(ROOT/"ollama-tags.json"),"--version",str(ROOT/"ollama-version.txt")])
+        self.assertEqual(code,0)
+        result = json.loads(output.getvalue())
+        self.assertTrue(result["offline_assets_verified"])
+        self.assertTrue(result["exports_verified"])
+        self.assertFalse(result["runtime_token_count_verified"])
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory)/"resources"
+            shutil.copytree(RESOURCES,copied)
+            changed = copied/"README.md"
+            changed.write_bytes(changed.read_bytes()+b"changed")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = main(["--resources",str(copied)])
+            self.assertEqual(code,1)
+            self.assertEqual(json.loads(output.getvalue())["error"],"qwen35_resource_checksum_mismatch")
+            self.assertTrue(changed.read_bytes().endswith(b"changed"))  # No silent repair.
 
 
 if __name__ == "__main__":

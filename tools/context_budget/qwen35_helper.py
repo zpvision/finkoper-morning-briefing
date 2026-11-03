@@ -82,7 +82,7 @@ def main():
     parser.add_argument("--resources", required=True)
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
     parser.add_argument("--http-timeout", type=float, default=30)
-    parser.add_argument("--qwen35-mode", choices=("baseline", "greedy", "thinking"), default="baseline")
+    parser.add_argument("--qwen35-mode", choices=("baseline", "greedy", "thinking", "thinking-long"), default="baseline")
     args = parser.parse_args()
     try:
         if not 0 < args.http_timeout <= 120:
@@ -94,7 +94,7 @@ def main():
         keys = {"system", "user"} if args.mode == "count" else {"system", "user", "base_url", "model"}
         if not isinstance(request, dict) or set(request) != keys or any(not isinstance(v, str) for v in request.values()):
             raise ProfileError("qwen35_invalid_request")
-        manifest, tokens = count(args.resources, request["system"], request["user"], args.qwen35_mode == "thinking")
+        manifest, tokens = count(args.resources, request["system"], request["user"], args.qwen35_mode in ("thinking", "thinking-long"))
         _, options = mode_config(manifest, args.qwen35_mode)
         reserve = options["num_predict"]
         if args.mode == "count":

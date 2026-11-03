@@ -67,7 +67,7 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	flags := flag.NewFlagSet("diagnose-qwen35", flag.ContinueOnError)
 	profile := flags.String("profile", "", "required: qwen35-9b-summary-v2-v1")
 	selected := flags.String("case", "sr-01", "sr-01, sr-04, sr-06, sr-07, hol-05, hol-09, or six")
-	mode := flags.String("mode", "baseline", "baseline, greedy, thinking, or all (sequential)")
+	mode := flags.String("mode", "baseline", "baseline, greedy, thinking, all (sequential), or explicit thinking-long (sr-06 only)")
 	resources := flags.String("profile-resources", "", "separate Qwen3.5 resource directory")
 	check := flags.Bool("check-profile", false, "explicit HTTP metadata/render-only verification; zero generations")
 	execute := flags.Bool("run", false, "explicitly allow one generation per selected case; no retries")
@@ -81,6 +81,9 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	modes := []string{*mode}
 	if *mode == "" {
 		return errors.New("invalid_qwen35_mode")
+	}
+	if *mode == "thinking-long" && *selected != "sr-06" {
+		return errors.New("thinking_long_requires_case_sr_06")
 	}
 	if *mode == "all" {
 		modes = []string{"baseline", "greedy", "thinking"}

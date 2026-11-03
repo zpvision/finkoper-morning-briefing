@@ -66,12 +66,17 @@ func Qwen35Configuration(mode string) (Qwen35Config, error) {
 		c.Options["temperature"] = float64(0)
 		c.Options["presence_penalty"] = float64(0)
 		c.Note = "Compared with baseline: temperature and presence_penalty change together; this does not isolate either parameter."
-	case "thinking":
+	case "thinking", "thinking-long":
 		c.Thinking, c.Reserve, c.Timeout = true, 4096, 300*time.Second
 		c.Options["temperature"] = float64(1)
 		c.Options["top_p"] = float64(0.95)
 		c.Options["num_predict"] = c.Reserve
 		c.Note = "Compared with baseline: think, sampling, full generation reserve and HTTP timeout change; this does not isolate thinking. Official Qwen3.5-9B thinking/general sampling."
+		if mode == "thinking-long" {
+			c.Reserve, c.Timeout = 6144, 600*time.Second
+			c.Options["num_predict"] = c.Reserve
+			c.Note = "Explicit sr-06-only probe. Same sampling and renderer as thinking; full reserve increases to 6144 and HTTP timeout to 600s. No retries or fallback."
+		}
 	default:
 		return Qwen35Config{}, errors.New("invalid_qwen35_mode")
 	}

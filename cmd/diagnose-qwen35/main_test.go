@@ -127,7 +127,9 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 				return
 			}
 			generations++
-			content, _ := json.Marshal(map[string]any{"summary": "Контролируемый ответ mock, не эталон.", "source_message_ids": []string{"sr-01-m1"}})
+			var user struct{ Messages []struct{ ID string } }
+			json.Unmarshal([]byte(p.Messages[1].Content), &user)
+			content, _ := json.Marshal(map[string]any{"summary": "Контролируемый ответ mock, не эталон.", "source_message_ids": []string{user.Messages[0].ID}})
 			count := plan.Budget.InputTokens
 			if mode == "count_mismatch" {
 				count++
@@ -183,12 +185,16 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 		defer eventLock.Unlock()
 		t.Fatalf("count mismatch: err=%v generations=%d records=%d code=%s requests=%v", err, generations, strings.Count(strings.TrimSpace(output.String()), "\n")+1, code, events)
 	}
-	inputs, err := evaluation.LoadFiles([]string{casePaths["sr-01"]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, user := briefing.PromptInput(inputs[0].Input)
-	for _, name := range []string{"greedy", "thinking"} {
+	for _, name := range []string{"greedy", "thinking", "thinking-long"} {
+		selected := "sr-01"
+		if name == "thinking-long" {
+			selected = "sr-06"
+		}
+		inputs, err := evaluation.LoadFiles([]string{casePaths[selected]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, user := briefing.PromptInput(inputs[0].Input)
 		generationMode, mode = name, "ok"
 		counter, err := diagnostic.NewQwen35CounterMode("", name)
 		if err != nil {
@@ -202,7 +208,7 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 		if name == "thinking" {
 			mode = "wrong_thinking"
 			output.Reset()
-			err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, "--run"}, &output)
+			err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, "--case", selected, "--run"}, &output)
 			var rejected report
 			json.Unmarshal(output.Bytes(), &rejected)
 			if err == nil || generations != before || rejected.Error == nil || *rejected.Error != "qwen35_runtime_renderer_mismatch" {
@@ -212,7 +218,7 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 		}
 		for _, action := range []string{"--check-profile", "--run"} {
 			output.Reset()
-			if err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, action}, &output); err != nil {
+			if err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, "--case", selected, action}, &output); err != nil {
 				t.Fatalf("%s %s: %v %s", name, action, err, output.String())
 			}
 			var result report
