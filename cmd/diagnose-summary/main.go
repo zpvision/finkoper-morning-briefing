@@ -43,11 +43,14 @@ type report struct {
 
 func run(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("diagnose-summary", flag.ContinueOnError)
-	set := flags.String("set", "development", "development (default), holdout (explicit final evaluation), or examples")
+	set := flags.String("set", "development", "development (default), regression (former holdout), or examples; holdout is a legacy alias")
 	execute := flags.Bool("run", false, "explicitly enable one generation per client, sequentially, no retries")
 	out := flags.String("out", "", "new .jsonl report; default stdout")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || (*set != "examples" && *set != "development" && *set != "holdout") {
+	if flags.Parse(args) != nil || flags.NArg() != 0 || (*set != "examples" && *set != "development" && *set != "holdout" && *set != "regression") {
 		return errors.New("invalid_summary_arguments")
+	}
+	if *set == "holdout" {
+		*set = "regression"
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
 		return errors.New("summary_report_requires_jsonl")
@@ -56,7 +59,11 @@ func run(args []string, output io.Writer) error {
 	var dataset evaluation.Dataset
 	var err error
 	if *set != "examples" {
-		dataset, err = evaluation.Load("evaluation", *set)
+		split := *set
+		if split == "regression" {
+			split = "holdout"
+		}
+		dataset, err = evaluation.Load("evaluation", split)
 		if err != nil {
 			return err
 		}

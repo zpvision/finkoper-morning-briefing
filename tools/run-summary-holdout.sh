@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Manual operator command only. Builds/runs in a new directory under the caller's HOME.
+# Legacy name: with current code --set holdout is a regression alias, not independent evaluation.
 set -euo pipefail
 umask 077
 commit=${1:?Usage: bash tools/run-summary-holdout.sh FULL_40_CHARACTER_COMMIT}

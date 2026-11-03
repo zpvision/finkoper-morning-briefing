@@ -1,6 +1,8 @@
 # Диагностика «кто написал и что хотел»
 
-Отдельная команда `cmd/diagnose-summary`, промпт `diagnostic-summary-v2`, схема `summary-v1`:
+Текущая диагностическая версия — v3; [отдельное сравнение замороженного v2 и v3](summary-v2-v3-comparison.md). Ранее использованный holdout теперь считается регрессионным, не независимым. Используйте --set regression; --set holdout сохранён как alias, в отчёте input_scope=regression. Формат summary-v1 и рабочий API не меняются.
+
+Отдельная команда `cmd/diagnose-summary`, промпт `diagnostic-summary-v3`, схема `summary-v1`:
 
 ```json
 {"summary":"Связная сводка на русском","source_message_ids":["id"]}
@@ -38,7 +40,7 @@ go build -o bin/diagnose-summary.exe ./cmd/diagnose-summary
 ./bin/diagnose-summary.exe --set holdout
 ```
 
-Без --run ни один вариант не делает HTTP-запросов. examples — именно examples/04-exact-20.json и examples/02.json, не development/holdout. development/holdout читают только входы выбранной части manifest, без разметки. Произвольные пути и объединённый all не принимаются. По умолчанию holdout не выбирается. В GoLand: Go Build, Package `finkoper-morning-briefing/cmd/diagnose-summary`, Working directory — корень, env выше, Program arguments пустые для development либо явно --set examples/holdout.
+Без --run ни один вариант не делает HTTP-запросов. examples — именно examples/04-exact-20.json и examples/02.json. development/regression читают только входы выбранной части manifest, без разметки. regression использует физический каталог holdout, уже утративший независимость. Произвольные пути и объединённый all не принимаются. По умолчанию выбирается development. В GoLand: Go Build, Package `finkoper-morning-briefing/cmd/diagnose-summary`, Working directory — корень, env выше, Program arguments пустые для development либо явно --set examples/regression.
 
 По умолчанию JSONL идёт в stdout. --out сохраняет новый файл .jsonl с 0600 на Unix; существующий не перезаписывается. JSONL и evaluation/reports исключены из Git. План тоже можно сохранить через --out. API-токен не нужен; конфигурация API и сервисы тональности/RAG не используются.
 
@@ -89,8 +91,8 @@ report_dir=$(sudo -u finkoper-briefing mktemp -d /tmp/briefing-summary.XXXXXX)
 summary8 --set examples --run --out "$report_dir/examples.jsonl"
 # Максимум 10 последовательных генераций, holdout не используется:
 summary8 --set development --run --out "$report_dir/development.jsonl"
-# Отдельный явный итоговый holdout-прогон, максимум 10 генераций:
-summary8 --set holdout --run --out "$report_dir/holdout.jsonl"
+# Явный регрессионный повтор бывшего holdout, максимум 10 генераций:
+summary8 --set regression --run --out "$report_dir/regression.jsonl"
 printf 'reports=%s\n' "$report_dir"
 ```
 

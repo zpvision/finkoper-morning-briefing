@@ -1,0 +1,52 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-06",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [
+    {
+      "id": "sr-06-c1",
+      "conversation_id": "sr-06-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "В ведомости появилась строка штрафа за простой. Проверьте основание, оплату и обжалование пока не поручаю.",
+      "sent_at": "2026-11-02T17:01:00+03:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "sr-06-m1",
+      "conversation_id": "sr-06-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Возвращаюсь к просьбе о штрафе.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-06-m2",
+      "conversation_id": "sr-06-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Вопрос тот же, не забудьте проверить основание.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    },
+    {
+      "id": "sr-06-m3",
+      "conversation_id": "sr-06-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Отдельно прошу прислать карточку поставщика.",
+      "sent_at": "2026-11-03T08:03:00+03:00"
+    },
+    {
+      "id": "sr-06-m4",
+      "conversation_id": "sr-06-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Основание проверю завтра.",
+      "sent_at": "2026-11-03T08:04:00+03:00"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-07",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "sr-07-m1",
+      "conversation_id": "sr-07-email",
+      "channel": "email",
+      "sender_role": "client",
+      "text": "Исправьте контактный телефон в карточке мастерской: вместо 234-16 нужен 234-61.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-07-m2",
+      "conversation_id": "sr-07-email",
+      "channel": "email",
+      "sender_role": "staff",
+      "text": "Телефон заменил на 234-61.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    },
+    {
+      "id": "sr-07-m3",
+      "conversation_id": "sr-07-telegram",
+      "channel": "telegram",
+      "sender_role": "client",
+      "text": "Проверила, теперь верно.",
+      "sent_at": "2026-11-03T08:03:00+03:00"
+    },
+    {
+      "id": "sr-07-m4",
+      "conversation_id": "sr-07-telegram",
+      "channel": "telegram",
+      "sender_role": "client",
+      "text": "Загрузил пакет накладных. Проверьте, читаются ли страницы.",
+      "sent_at": "2026-11-03T08:04:00+03:00"
+    }
+  ]
+}

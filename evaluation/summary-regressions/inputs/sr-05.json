@@ -1,0 +1,27 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-05",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "sr-05-m1",
+      "conversation_id": "sr-05-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Оформите передачу ключей как обычно.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-05-m2",
+      "conversation_id": "sr-05-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Сообщение принято.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    }
+  ]
+}

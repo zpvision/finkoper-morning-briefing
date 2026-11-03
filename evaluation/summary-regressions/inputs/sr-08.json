@@ -1,0 +1,60 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-08",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [
+    {
+      "id": "sr-08-c1",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "В отчёте по отгрузкам каждую поездку показываем отдельно. Столбец с закупочной ценой исключаем.",
+      "sent_at": "2026-11-02T17:01:00+03:00"
+    },
+    {
+      "id": "sr-08-c2",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Да.",
+      "sent_at": "2026-11-02T17:02:00+03:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "sr-08-m1",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Сделайте отчёт по отгрузкам по прежней договорённости.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-08-m2",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Хорошо, подготовлю.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    },
+    {
+      "id": "sr-08-m3",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Спасибо.",
+      "sent_at": "2026-11-03T08:03:00+03:00"
+    },
+    {
+      "id": "sr-08-m4",
+      "conversation_id": "sr-08-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Доброй смены!",
+      "sent_at": "2026-11-03T08:04:00+03:00"
+    }
+  ]
+}

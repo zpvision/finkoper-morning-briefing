@@ -1,0 +1,43 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-03",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [],
+  "messages": [
+    {
+      "id": "sr-03-m1",
+      "conversation_id": "sr-03-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Проверьте расхождение по возврату тары до пятницы: в реестре 760, в квитанции 690.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-03-m2",
+      "conversation_id": "sr-03-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Срок до пятницы снимаю, сама проверка остаётся нужна.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    },
+    {
+      "id": "sr-03-m3",
+      "conversation_id": "sr-03-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Ещё пришлите копию счёта за хранение.",
+      "sent_at": "2026-11-03T08:03:00+03:00"
+    },
+    {
+      "id": "sr-03-m4",
+      "conversation_id": "sr-03-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Проверку начну после обеда.",
+      "sent_at": "2026-11-03T08:04:00+03:00"
+    }
+  ]
+}

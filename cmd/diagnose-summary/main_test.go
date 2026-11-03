@@ -156,7 +156,7 @@ func TestDefaultOfflineAndExplicitHoldoutHTTPWithoutAnnotations(t *testing.T) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
 		var entry report
-		if json.Unmarshal([]byte(line), &entry) != nil || entry.InputScope != "holdout" || entry.DatasetVersion != "isolation-fixture" || entry.PromptVersion != "diagnostic-summary-v2" || entry.GenerationAttempts != 1 || entry.Error != nil {
+		if json.Unmarshal([]byte(line), &entry) != nil || entry.InputScope != "regression" || entry.DatasetVersion != "isolation-fixture" || entry.PromptVersion != diagnostic.SummaryPromptVersion || entry.GenerationAttempts != 1 || entry.Error != nil {
 			t.Fatal("holdout report")
 		}
 	}

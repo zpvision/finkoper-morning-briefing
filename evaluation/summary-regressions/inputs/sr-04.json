@@ -1,0 +1,52 @@
+{
+  "company_id": "synthetic_regression",
+  "client_id": "sr-04",
+  "period": {
+    "from": "2026-11-02T18:00:00+03:00",
+    "to": "2026-11-03T09:00:00+03:00"
+  },
+  "context_messages": [
+    {
+      "id": "sr-04-c1",
+      "conversation_id": "sr-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Для внешнего ревизора разрешён только просмотр итогов: без экспорта и без закупочных цен.",
+      "sent_at": "2026-11-02T17:01:00+03:00"
+    },
+    {
+      "id": "sr-04-c2",
+      "conversation_id": "sr-04-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Такой набор прав согласован.",
+      "sent_at": "2026-11-02T17:02:00+03:00"
+    },
+    {
+      "id": "sr-04-c3",
+      "conversation_id": "sr-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "В другой раз поговорим об оформлении витрины.",
+      "sent_at": "2026-11-02T17:03:00+03:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "sr-04-m1",
+      "conversation_id": "sr-04-max",
+      "channel": "max",
+      "sender_role": "client",
+      "text": "Внешнему ревизору выдайте доступ к отчёту по согласованной схеме.",
+      "sent_at": "2026-11-03T08:01:00+03:00"
+    },
+    {
+      "id": "sr-04-m2",
+      "conversation_id": "sr-04-max",
+      "channel": "max",
+      "sender_role": "staff",
+      "text": "Настрою после перерыва.",
+      "sent_at": "2026-11-03T08:02:00+03:00"
+    }
+  ]
+}

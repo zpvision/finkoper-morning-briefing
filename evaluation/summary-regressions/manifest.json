@@ -1,0 +1,37 @@
+{
+  "version": "summary-regressions-v1",
+  "cases": [
+    {
+      "id": "sr-01",
+      "input": "inputs/sr-01.json"
+    },
+    {
+      "id": "sr-02",
+      "input": "inputs/sr-02.json"
+    },
+    {
+      "id": "sr-03",
+      "input": "inputs/sr-03.json"
+    },
+    {
+      "id": "sr-04",
+      "input": "inputs/sr-04.json"
+    },
+    {
+      "id": "sr-05",
+      "input": "inputs/sr-05.json"
+    },
+    {
+      "id": "sr-06",
+      "input": "inputs/sr-06.json"
+    },
+    {
+      "id": "sr-07",
+      "input": "inputs/sr-07.json"
+    },
+    {
+      "id": "sr-08",
+      "input": "inputs/sr-08.json"
+    }
+  ]
+}
