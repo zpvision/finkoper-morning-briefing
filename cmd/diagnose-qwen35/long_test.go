@@ -28,7 +28,7 @@ func TestThinkingLongExplicitScope(t *testing.T) {
 		t.Fatal("invalid scope reached resource factory")
 		return nil, nil
 	}
-	for _, selected := range []string{"", "sr-01", "sr-04", "sr-07", "hol-05", "hol-09", "six"} {
+	for _, selected := range []string{"sr-09", "hol-11", "development", "holdout", "six"} {
 		args := []string{"--profile", diagnostic.Qwen35Profile, "--mode", "thinking-long"}
 		if selected != "" {
 			args = append(args, "--case", selected)

@@ -20,11 +20,56 @@ import (
 
 var casePaths = map[string]string{
 	"sr-01":  "evaluation/summary-regressions/inputs/sr-01.json",
+	"sr-02":  "evaluation/summary-regressions/inputs/sr-02.json",
+	"sr-03":  "evaluation/summary-regressions/inputs/sr-03.json",
 	"sr-04":  "evaluation/summary-regressions/inputs/sr-04.json",
+	"sr-05":  "evaluation/summary-regressions/inputs/sr-05.json",
 	"sr-06":  "evaluation/summary-regressions/inputs/sr-06.json",
 	"sr-07":  "evaluation/summary-regressions/inputs/sr-07.json",
+	"sr-08":  "evaluation/summary-regressions/inputs/sr-08.json",
+	"hol-01": "evaluation/inputs/holdout/hol-01.json",
+	"hol-02": "evaluation/inputs/holdout/hol-02.json",
+	"hol-03": "evaluation/inputs/holdout/hol-03.json",
+	"hol-04": "evaluation/inputs/holdout/hol-04.json",
 	"hol-05": "evaluation/inputs/holdout/hol-05.json",
+	"hol-06": "evaluation/inputs/holdout/hol-06.json",
+	"hol-07": "evaluation/inputs/holdout/hol-07.json",
+	"hol-08": "evaluation/inputs/holdout/hol-08.json",
 	"hol-09": "evaluation/inputs/holdout/hol-09.json",
+	"hol-10": "evaluation/inputs/holdout/hol-10.json",
+}
+
+var sixCaseIDs = []string{"sr-01", "sr-04", "sr-06", "sr-07", "hol-05", "hol-09"}
+
+// Fixed input-only selection; no directory scans, manifests with labels or annotations.
+func selectCaseIDs(mode, selected string) ([]string, error) {
+	if selected == "regressions" {
+		if mode != "thinking-long" {
+			return nil, errors.New("regressions_requires_thinking_long")
+		}
+		ids := make([]string, 0, 18)
+		for i := 1; i <= 8; i++ {
+			ids = append(ids, fmt.Sprintf("sr-%02d", i))
+		}
+		for i := 1; i <= 10; i++ {
+			ids = append(ids, fmt.Sprintf("hol-%02d", i))
+		}
+		return ids, nil
+	}
+	if selected == "six" && mode != "thinking-long" {
+		return append([]string(nil), sixCaseIDs...), nil
+	}
+	if _, ok := casePaths[selected]; ok {
+		if mode == "thinking-long" {
+			return []string{selected}, nil
+		}
+		for _, id := range sixCaseIDs {
+			if selected == id {
+				return []string{selected}, nil
+			}
+		}
+	}
+	return nil, errors.New("unknown_qwen35_case")
 }
 
 type report struct {
@@ -66,8 +111,8 @@ func run(args []string, output io.Writer) error {
 func runWithRunner(args []string, output io.Writer, newRunner func(string, string) (*diagnostic.Runner, error)) error {
 	flags := flag.NewFlagSet("diagnose-qwen35", flag.ContinueOnError)
 	profile := flags.String("profile", "", "required: qwen35-9b-summary-v2-v1")
-	selected := flags.String("case", "sr-01", "sr-01, sr-04, sr-06, sr-07, hol-05, hol-09, or six")
-	mode := flags.String("mode", "baseline", "baseline, greedy, thinking, all (sequential), or explicit thinking-long (sr-06 only)")
+	selected := flags.String("case", "sr-01", "legacy single case or six; thinking-long also sr-01..08, hol-01..10, or regressions (18 inputs)")
+	mode := flags.String("mode", "baseline", "baseline, greedy, thinking, all (three modes), or explicit thinking-long")
 	resources := flags.String("profile-resources", "", "separate Qwen3.5 resource directory")
 	check := flags.Bool("check-profile", false, "explicit HTTP metadata/render-only verification; zero generations")
 	execute := flags.Bool("run", false, "explicitly allow one generation per selected case; no retries")
@@ -82,9 +127,6 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	if *mode == "" {
 		return errors.New("invalid_qwen35_mode")
 	}
-	if *mode == "thinking-long" && *selected != "sr-06" {
-		return errors.New("thinking_long_requires_case_sr_06")
-	}
 	if *mode == "all" {
 		modes = []string{"baseline", "greedy", "thinking"}
 	}
@@ -93,9 +135,12 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 			return err
 		}
 	}
-	ids := []string{*selected}
-	if *selected == "six" {
-		ids = []string{"sr-01", "sr-04", "sr-06", "sr-07", "hol-05", "hol-09"}
+	ids, err := selectCaseIDs(*mode, *selected)
+	if err != nil {
+		return err
+	}
+	if len(ids)*len(modes) > 18 {
+		return errors.New("qwen35_generation_limit_exceeded")
 	}
 	paths := []string{}
 	for _, id := range ids {
@@ -154,6 +199,11 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 				return errors.New("qwen35_output_failed")
 			}
 			failed = failed || diagnostic.Failed(record)
+			// Per-input budget refusal is not a model/resource incompatibility.
+			// Keep legacy modes' behavior unchanged; long regressions continue safely.
+			if modes[m] == "thinking-long" && record.Error != nil && *record.Error == "input_budget_exceeded" {
+				continue
+			}
 			// Stop on compatibility/count mismatch even if the sole probe already generated.
 			if diagnostic.PreflightFailed(record) || (record.RuntimeTokenCountVerified != nil && !*record.RuntimeTokenCountVerified) {
 				return errors.New("qwen35_compatibility_failed")

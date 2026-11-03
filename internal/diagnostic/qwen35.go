@@ -75,7 +75,7 @@ func Qwen35Configuration(mode string) (Qwen35Config, error) {
 		if mode == "thinking-long" {
 			c.Reserve, c.Timeout = 6144, 600*time.Second
 			c.Options["num_predict"] = c.Reserve
-			c.Note = "Explicit sr-06-only probe. Same sampling and renderer as thinking; full reserve increases to 6144 and HTTP timeout to 600s. No retries or fallback."
+			c.Note = "Explicit regression probe. Same sampling and renderer as thinking; full reserve increases to 6144 and HTTP timeout to 600s. No retries or fallback."
 		}
 	default:
 		return Qwen35Config{}, errors.New("invalid_qwen35_mode")
