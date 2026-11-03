@@ -1,5 +1,7 @@
 # Отдельная диагностика Qwen3.5 9B
 
+Теперь доступно отдельное [сравнение baseline/greedy/thinking](qwen35-mode-comparison.md) через `--mode` существующего diagnose-qwen35. Описанная ниже прежняя конфигурация — baseline по умолчанию; его промпт, sampling, renderer, резерв и timeout сохранены. Thinking имеет отдельные renderer/резерв/timeout и обязательные проверки.
+
 `cmd/diagnose-qwen35` использует только профиль `qwen35-9b-summary-v2-v1`: `qwen3.5:9b`, digest `56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90`, неизменённые `diagnostic-summary-v2` и `summary-v1`. Это связный пересказ, а не новый промпт с цитатами. API, morning-v3, SQLite, прежние диагностические профили и ресурсы 8B не переключаются.
 
 Условия: system+user, только текст, без tools/изображений; `think=false`, `stream=false`, `keep_alive=30m`, контекст 8192, резерв/`num_predict` 1000, `shift=false`, `truncate=false`. Одна последовательная генерация на вход, без повторов и repair. Проверяются done/done_reason, полный JSON и источники; thinking отдельно от content, его текст не сохраняется. Структурная проверка не оценивает смысл.

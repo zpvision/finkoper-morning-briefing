@@ -30,6 +30,10 @@ var casePaths = map[string]string{
 type report struct {
 	diagnostic.Record
 	Profile             string    `json:"profile"`
+	GenerationMode      string    `json:"generation_mode"`
+	CallTimeoutMS       int64     `json:"call_timeout_ms"`
+	SamplingSource      string    `json:"sampling_source"`
+	ModeConfigHash      string    `json:"mode_config_sha256"`
 	CaseID              string    `json:"case_id"`
 	AssessmentRole      string    `json:"assessment_role"`
 	SchemaVersion       string    `json:"schema_version"`
@@ -49,9 +53,21 @@ func main() {
 	}
 }
 func run(args []string, output io.Writer) error {
+	return runWithRunner(args, output, func(resources, mode string) (*diagnostic.Runner, error) {
+		counter, err := diagnostic.NewQwen35CounterMode(resources, mode)
+		if err != nil {
+			return nil, err
+		}
+		return diagnostic.NewQwen35RunnerMode(counter.BaseURL, counter, mode)
+	})
+}
+
+// Tests inject only the counter/base URL; production and mock share the HTTP transport.
+func runWithRunner(args []string, output io.Writer, newRunner func(string, string) (*diagnostic.Runner, error)) error {
 	flags := flag.NewFlagSet("diagnose-qwen35", flag.ContinueOnError)
 	profile := flags.String("profile", "", "required: qwen35-9b-summary-v2-v1")
 	selected := flags.String("case", "sr-01", "sr-01, sr-04, sr-06, sr-07, hol-05, hol-09, or six")
+	mode := flags.String("mode", "baseline", "baseline, greedy, thinking, or all (sequential)")
 	resources := flags.String("profile-resources", "", "separate Qwen3.5 resource directory")
 	check := flags.Bool("check-profile", false, "explicit HTTP metadata/render-only verification; zero generations")
 	execute := flags.Bool("run", false, "explicitly allow one generation per selected case; no retries")
@@ -61,6 +77,18 @@ func run(args []string, output io.Writer) error {
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
 		return errors.New("qwen35_report_requires_jsonl")
+	}
+	modes := []string{*mode}
+	if *mode == "" {
+		return errors.New("invalid_qwen35_mode")
+	}
+	if *mode == "all" {
+		modes = []string{"baseline", "greedy", "thinking"}
+	}
+	for _, name := range modes {
+		if _, err := diagnostic.Qwen35Configuration(name); err != nil {
+			return err
+		}
 	}
 	ids := []string{*selected}
 	if *selected == "six" {
@@ -78,12 +106,16 @@ func run(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	counter, err := diagnostic.NewQwen35Counter(*resources)
-	if err != nil {
-		return err
+	runners := make([]*diagnostic.Runner, 0, len(modes))
+	for _, name := range modes {
+		runner, err := newRunner(*resources, name)
+		if err != nil {
+			return err
+		}
+		runner.VerifyOnly = *check
+		defer runner.Client.CloseIdleConnections()
+		runners = append(runners, runner)
 	}
-	runner := diagnostic.NewQwen35Runner(counter.BaseURL, counter)
-	runner.VerifyOnly = *check
 	manifest, pinHash := diagnostic.Qwen35PinnedManifest()
 	var file *os.File
 	if *out != "" {
@@ -102,21 +134,27 @@ func run(args []string, output io.Writer) error {
 	encoder := json.NewEncoder(output)
 	failed := false
 	for i, input := range inputs {
-		if ctx.Err() != nil {
-			return errors.New("qwen35_cancelled")
-		}
-		record := runner.SummarizeVersion(ctx, input.File, input.Input, diagnostic.SummaryPromptVersionV2, *execute)
-		entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
-		if record.Budget.Verified {
-			entry.ModelDigest = &manifest.Digest
-		}
-		if encoder.Encode(entry) != nil {
-			return errors.New("qwen35_output_failed")
-		}
-		failed = failed || diagnostic.Failed(record)
-		// Stop on compatibility/count mismatch even if the sole probe already generated.
-		if diagnostic.PreflightFailed(record) || (record.RuntimeTokenCountVerified != nil && !*record.RuntimeTokenCountVerified) {
-			return errors.New("qwen35_compatibility_failed")
+		for m, runner := range runners {
+			if ctx.Err() != nil {
+				return errors.New("qwen35_cancelled")
+			}
+			record := runner.SummarizeVersion(ctx, input.File, input.Input, diagnostic.SummaryPromptVersionV2, *execute)
+			entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
+			config, _ := diagnostic.Qwen35Configuration(modes[m])
+			entry.GenerationMode, entry.CallTimeoutMS, entry.SamplingSource = config.Mode, config.Timeout.Milliseconds(), diagnostic.Qwen35SamplingSource
+			configRaw, _ := json.Marshal(map[string]any{"mode": config.Mode, "think": config.Thinking, "reserve": config.Reserve, "timeout_ms": entry.CallTimeoutMS, "options": config.Options})
+			entry.ModeConfigHash = diagnostic.Hash(string(configRaw))
+			if record.Budget.Verified {
+				entry.ModelDigest = &manifest.Digest
+			}
+			if encoder.Encode(entry) != nil {
+				return errors.New("qwen35_output_failed")
+			}
+			failed = failed || diagnostic.Failed(record)
+			// Stop on compatibility/count mismatch even if the sole probe already generated.
+			if diagnostic.PreflightFailed(record) || (record.RuntimeTokenCountVerified != nil && !*record.RuntimeTokenCountVerified) {
+				return errors.New("qwen35_compatibility_failed")
+			}
 		}
 	}
 	if file != nil && file.Sync() != nil {

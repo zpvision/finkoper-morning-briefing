@@ -82,6 +82,7 @@ type Runner struct {
 	SummaryMode    bool // Separate diagnostic contract, reserve=1000; never used by API.
 	VerifyOnly     bool // Explicit diagnostic check: render and metadata, no generation.
 	Qwen35Profile  bool // Pinned diagnostic profile, separate tokenizer/renderer from 8B.
+	Qwen35Mode     string
 }
 
 func NewRunner(base, model string, timeout time.Duration, counter briefing.BudgetCounter) *Runner {
@@ -166,12 +167,20 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		reserve = 4096
 		options = map[string]any{"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0, "num_ctx": 8192, "num_predict": reserve}
 	}
+	var qwen35 Qwen35Config
+	var qwen35Err error
 	if r.Qwen35Profile {
-		options = Qwen35Options()
+		qwen35, qwen35Err = Qwen35Configuration(r.Qwen35Mode)
+		if qwen35Err == nil {
+			options, reserve = qwen35.Options, qwen35.Reserve
+		}
 	}
 	params := map[string]any{"stream": false, "think": r.Thinking, "truncate": false, "shift": false, "keep_alive": "30m", "options": options}
 	if r.Thinking {
 		params["timeout_ms"] = 180000
+		if r.Qwen35Profile {
+			params["timeout_ms"] = qwen35.Timeout.Milliseconds()
+		}
 	}
 	payload := map[string]any{"model": r.Model, "stream": false, "think": r.Thinking, "truncate": false, "shift": false, "keep_alive": "30m", "options": options, "messages": messages, "format": v.Format}
 	raw, marshalErr := json.Marshal(payload)
@@ -190,18 +199,18 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
-	if r.Qwen35Profile && (!r.SummaryMode || r.Thinking || r.Model != Qwen35Model) {
+	if r.Qwen35Profile && (qwen35Err != nil || !r.SummaryMode || r.Thinking != qwen35.Thinking || r.Model != Qwen35Model) {
 		failure("invalid_qwen35_diagnostic_profile")
 		return
 	}
-	if r.SummaryMode && ((!r.Qwen35Profile && r.Model != "qwen3:8b") || r.Thinking) {
+	if r.SummaryMode && !r.Qwen35Profile && (r.Model != "qwen3:8b" || r.Thinking) {
 		failure("summary_requires_qwen3_8b_think_false")
 		return
 	}
 	if r.Qwen35Profile {
-		out.ComparisonNote = "Same frozen diagnostic-summary-v2/schema; compared with 8B, model, tokenizer, renderer and sampling change (temperature 0 -> 0.7, top_p=0.8, top_k=20, min_p=0, presence_penalty=1.5, repeat_penalty=1). Render/model check is not runtime token-count confirmation."
+		out.ComparisonNote = qwen35.Note + " Render/model check is not runtime token-count confirmation."
 	}
-	if r.Thinking {
+	if r.Thinking && !r.Qwen35Profile {
 		out.ComparisonNote = "Compared with A: think, sampling, generation reserve and timeout change; this does not isolate think alone."
 		if r.Model != "qwen3:8b" {
 			failure("thinking_experiment_requires_qwen3_8b")
@@ -264,7 +273,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	out.RenderedHash = &renderHash
 	expectedRender := ExpectedRender(v.Prompt, user, r.Thinking)
 	if r.Qwen35Profile {
-		expectedRender = Qwen35Render(v.Prompt, user)
+		expectedRender = Qwen35Render(v.Prompt, user, r.Thinking)
 	}
 	preserved := rendered == expectedRender
 	out.SystemPreserved = &preserved
@@ -288,7 +297,11 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	if err != nil {
 		elapsed := time.Since(httpStart).Milliseconds()
 		out.HTTPMS = &elapsed
-		failure("ollama_transport_error")
+		if r.Qwen35Profile && errors.Is(err, context.DeadlineExceeded) {
+			failure("ollama_timeout")
+		} else {
+			failure("ollama_transport_error")
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -300,7 +313,11 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 		return
 	}
 	if readErr != nil || len(response) > briefing.MaxBody {
-		failure("ollama_response_size_or_read_error")
+		if r.Qwen35Profile && errors.Is(readErr, context.DeadlineExceeded) {
+			failure("ollama_timeout")
+		} else {
+			failure("ollama_response_size_or_read_error")
+		}
 		return
 	}
 	var envelope struct {
@@ -375,15 +392,22 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	} else if envelope.Done == nil || !*envelope.Done || envelope.Reason == nil || *envelope.Reason != "stop" {
 		failure("ollama_incomplete_response")
 	}
+	if r.Qwen35Profile && out.Incomplete != nil && *out.Incomplete && out.Error == nil {
+		failure("ollama_incomplete_response")
+	}
 	if r.Qwen35Profile {
-		verified := false
-		out.RuntimeTokenCountVerified = &verified
-		if envelope.Input == nil && out.Error == nil {
+		// An unsuccessful response may omit usage: absence is not proof of mismatch.
+		// Completed responses still require usage; any observed mismatch stops the CLI.
+		if envelope.Input != nil {
+			verified := *envelope.Input == int64(budget.InputTokens)
+			out.RuntimeTokenCountVerified = &verified
+			if !verified && out.Error == nil {
+				failure("qwen35_runtime_token_count_mismatch")
+			}
+		} else if out.Error == nil {
+			verified := false
+			out.RuntimeTokenCountVerified = &verified
 			failure("qwen35_runtime_prompt_eval_count_missing")
-		} else if envelope.Input != nil && *envelope.Input != int64(budget.InputTokens) && out.Error == nil {
-			failure("qwen35_runtime_token_count_mismatch")
-		} else if envelope.Input != nil && *envelope.Input == int64(budget.InputTokens) {
-			verified = true
 		}
 	}
 	if r.Thinking || r.SummaryMode {

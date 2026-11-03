@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"finkoper-morning-briefing/internal/briefing"
 )
@@ -41,12 +42,61 @@ func Qwen35Options() map[string]any {
 	return options
 }
 
-// Restricted, pinned Qwen35Renderer, not the 8B Go template: no double system newline or /no_think suffix.
-func Qwen35Render(system, user string) string {
-	return "<|im_start|>system\n" + system + "<|im_end|>\n<|im_start|>user\n" + user + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+// Sampling source: pinned Qwen/Qwen3.5-9B README, "Thinking mode for general tasks".
+const Qwen35SamplingSource = "https://huggingface.co/Qwen/Qwen3.5-9B/blob/c202236235762e1c871ad0ccb60c8ee5ba337b9a/README.md"
+
+type Qwen35Config struct {
+	Mode     string
+	Thinking bool
+	Reserve  int
+	Timeout  time.Duration
+	Options  map[string]any
+	Note     string
+}
+
+func Qwen35Configuration(mode string) (Qwen35Config, error) {
+	if mode == "" {
+		mode = "baseline"
+	}
+	c := Qwen35Config{Mode: mode, Reserve: 1000, Timeout: 120 * time.Second, Options: Qwen35Options()}
+	switch mode {
+	case "baseline":
+		c.Note = "Frozen baseline from 6bb6aaf: non-thinking general sampling. Compared with 8B, model, tokenizer, renderer and sampling differ."
+	case "greedy":
+		c.Options["temperature"] = float64(0)
+		c.Options["presence_penalty"] = float64(0)
+		c.Note = "Compared with baseline: temperature and presence_penalty change together; this does not isolate either parameter."
+	case "thinking":
+		c.Thinking, c.Reserve, c.Timeout = true, 4096, 300*time.Second
+		c.Options["temperature"] = float64(1)
+		c.Options["top_p"] = float64(0.95)
+		c.Options["num_predict"] = c.Reserve
+		c.Note = "Compared with baseline: think, sampling, full generation reserve and HTTP timeout change; this does not isolate thinking. Official Qwen3.5-9B thinking/general sampling."
+	default:
+		return Qwen35Config{}, errors.New("invalid_qwen35_mode")
+	}
+	return c, nil
+}
+
+// Restricted, pinned Qwen35Renderer, not the 8B Go template: distinct thinking prefill,
+// no double system newline or /no_think suffix. Runtime render-only must match.
+func Qwen35Render(system, user string, thinking ...bool) string {
+	prefix := "<|im_start|>system\n" + system + "<|im_end|>\n<|im_start|>user\n" + user + "<|im_end|>\n<|im_start|>assistant\n"
+	if len(thinking) > 0 && thinking[0] {
+		return prefix + "<think>\n"
+	}
+	return prefix + "<think>\n\n</think>\n\n"
 }
 
 func NewQwen35Counter(resources string) (*briefing.PythonCounter, error) {
+	return NewQwen35CounterMode(resources, "baseline")
+}
+
+func NewQwen35CounterMode(resources, mode string) (*briefing.PythonCounter, error) {
+	config, err := Qwen35Configuration(mode)
+	if err != nil {
+		return nil, err
+	}
 	if model := os.Getenv("OLLAMA_MODEL"); model != "" && model != Qwen35Model {
 		return nil, errors.New("OLLAMA_MODEL_conflicts_with_qwen35_profile")
 	}
@@ -72,6 +122,7 @@ func NewQwen35Counter(resources string) (*briefing.PythonCounter, error) {
 		return nil, err
 	}
 	counter.DiagnosticBudgetMethod = Qwen35BudgetMethod
+	counter.DiagnosticQwen35Mode = config.Mode
 	if strings.TrimSpace(counter.BaseURL) == "" {
 		return nil, errors.New("qwen35_invalid_base_url")
 	}
@@ -79,8 +130,20 @@ func NewQwen35Counter(resources string) (*briefing.PythonCounter, error) {
 }
 
 func NewQwen35Runner(base string, counter briefing.BudgetCounter) *Runner {
+	runner, _ := NewQwen35RunnerMode(base, counter, "baseline")
+	return runner
+}
+
+func NewQwen35RunnerMode(base string, counter briefing.BudgetCounter, mode string) (*Runner, error) {
+	config, err := Qwen35Configuration(mode)
+	if err != nil {
+		return nil, err
+	}
 	runner := NewSummaryRunner(base, counter)
 	runner.Model = Qwen35Model
 	runner.Qwen35Profile = true
-	return runner
+	runner.Qwen35Mode = config.Mode
+	runner.Thinking = config.Thinking
+	runner.Client.Timeout = config.Timeout
+	return runner, nil
 }

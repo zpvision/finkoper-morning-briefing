@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import unittest
 
-from qwen35_profile import ProfileError, load_files, pin, render, validate_exports
+from qwen35_profile import ProfileError, load_files, pin, render, validate_exports, mode_config
 
 ROOT = Path(__file__).resolve().parents[2]
 RESOURCES = ROOT / "resources/tokenizer/qwen35-9b"
@@ -15,6 +15,7 @@ class Qwen35RenderTests(unittest.TestCase):
             render(" s", "u")
         with self.assertRaisesRegex(ProfileError, "manifest_pin_mismatch"):
             pin(b"{}")
+        self.assertEqual(render("s", "u", True), "<|im_start|>system\ns<|im_end|>\n<|im_start|>user\nu<|im_end|>\n<|im_start|>assistant\n<think>\n")
 
 
 @unittest.skipUnless(RESOURCES.exists(), "prepare separate Qwen3.5 assets")
@@ -43,6 +44,24 @@ class Qwen35AssetTests(unittest.TestCase):
         self.assertEqual(tokens, tokenizer.encode(render("system", '{"text":"и\u0306 е\u0308 😀"}'), add_special_tokens=False).ids)
         _, long_tokens = count(RESOURCES, "system", ("длинный " * 10000).rstrip())
         self.assertGreater(len(long_tokens) + 1000, 8192)
+
+    def test_thinking_tokens_and_sampling_from_pinned_resources(self):
+        from qwen35_helper import count
+        from tokenizers import Tokenizer
+        manifest, files = load_files(RESOURCES)
+        self.assertIn("Thinking mode for general tasks: `temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0`", files["README.md"].decode())
+        self.assertIn('sb.WriteString("<think>\\n")', files["ollama__model__renderers__qwen35.go.source"].decode())
+        thinking, options = mode_config(manifest, "thinking")
+        self.assertTrue(thinking)
+        self.assertEqual(options, dict(temperature=1.0, top_p=.95, top_k=20, min_p=0, presence_penalty=1.5, repeat_penalty=1, num_ctx=8192, num_predict=4096))
+        tokenizer = Tokenizer.from_str(files["tokenizer.json"].decode())
+        tokenizer.normalizer = None
+        tokenizer.no_padding()
+        tokenizer.no_truncation()
+        _, tokens = count(RESOURCES,"system",'{"text":"проверка"}', True)
+        self.assertEqual(tokens,tokenizer.encode(render("system",'{"text":"проверка"}',True),add_special_tokens=False).ids)
+        _, plain = count(RESOURCES,"system",'{"text":"проверка"}', False)
+        self.assertNotEqual(tokens,plain)
 
 
 if __name__ == "__main__":

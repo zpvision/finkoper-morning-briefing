@@ -87,12 +87,25 @@ def validate_exports(directory, show, tags, version):
     return manifest
 
 
-def render(system, user):
+def render(system, user, thinking=False):
     # Restricted form of Qwen35Renderer.Render at the pinned Ollama commit:
-    # system+user, no media/tools, explicit think=false, LeadingBOS="".
+    # system+user, no media/tools, explicit think flag, LeadingBOS="".
     # Callers use the fixed system and canonical JSON (no outside whitespace).
     if system != system.strip() or user != user.strip():
         raise ProfileError("qwen35_unsupported_outer_whitespace")
-    return ("<|im_start|>system\n" + system + "<|im_end|>\n"
+    prefix = ("<|im_start|>system\n" + system + "<|im_end|>\n"
             + "<|im_start|>user\n" + user + "<|im_end|>\n"
-            + "<|im_start|>assistant\n<think>\n\n</think>\n\n")
+            + "<|im_start|>assistant\n")
+    return prefix + ("<think>\n" if thinking else "<think>\n\n</think>\n\n")
+
+
+def mode_config(manifest, mode):
+    options = dict(manifest["sampling"], num_ctx=8192, num_predict=1000)
+    if mode == "greedy":
+        options.update(temperature=0, presence_penalty=0)
+    elif mode == "thinking":
+        # Pinned official Qwen3.5-9B README: thinking mode for general tasks.
+        options.update(temperature=1.0, top_p=0.95, num_predict=4096)
+    elif mode != "baseline":
+        raise ProfileError("invalid_qwen35_mode")
+    return mode == "thinking", options

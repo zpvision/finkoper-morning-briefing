@@ -62,6 +62,7 @@ type PythonCounter struct {
 	DiagnosticSummary      bool   // CLI-only summary reserve=1000; production default is unchanged.
 	DiagnosticProfile      string // Explicit CLI-only profile, never set by service configuration.
 	DiagnosticBudgetMethod string // Explicit diagnostic factory only; default remains the 8B method.
+	DiagnosticQwen35Mode   string // CLI-only mode for the independent Qwen3.5 helper.
 	slot                   chan struct{}
 	verified               atomic.Bool
 }
@@ -148,6 +149,9 @@ func (p *PythonCounter) invoke(ctx context.Context, mode string, request any, ou
 	}
 	if p.DiagnosticProfile != "" {
 		args = append(args, "--diagnostic-profile", p.DiagnosticProfile)
+	}
+	if p.DiagnosticQwen35Mode != "" {
+		args = append(args, "--qwen35-mode", p.DiagnosticQwen35Mode)
 	}
 	cmd := exec.CommandContext(ctx, p.Python, args...)
 	cmd.WaitDelay = time.Second

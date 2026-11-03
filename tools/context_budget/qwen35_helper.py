@@ -9,12 +9,12 @@ import urllib.request
 
 from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # Trusted sibling module; -I excludes cwd/PYTHONPATH.
-from qwen35_profile import ProfileError, METHOD, check_show, load_files, render, sha
+from qwen35_profile import ProfileError, METHOD, check_show, load_files, render, mode_config
 
 MAX_RESPONSE = 32 * 1024 * 1024
 
 
-def count(directory, system, user):
+def count(directory, system, user, thinking=False):
     manifest, files = load_files(directory)
     if sys.prefix == sys.base_prefix or importlib.metadata.version("tokenizers") != "0.22.1":
         raise ProfileError("qwen35_requires_tokenizers_0_22_1_venv")
@@ -22,11 +22,11 @@ def count(directory, system, user):
     tokenizer.normalizer = None  # GGUF BPE path does not run HF's NFC. Never modify generation input.
     tokenizer.no_padding()
     tokenizer.no_truncation()
-    tokens = tokenizer.encode(render(system, user), add_special_tokens=False).ids
+    tokens = tokenizer.encode(render(system, user, thinking), add_special_tokens=False).ids
     return manifest, tokens
 
 
-def verify(manifest, base, model, system, user, timeout):
+def verify(manifest, base, model, system, user, timeout, mode="baseline"):
     if model != manifest["model"]:
         raise ProfileError("qwen35_model_digest_mismatch")
     parsed = urllib.parse.urlsplit(base)
@@ -62,14 +62,14 @@ def verify(manifest, base, model, system, user, timeout):
             raise ProfileError("qwen35_model_digest_mismatch")
         check_show(call("/api/show", {"model": model}), manifest)
     metadata()
-    options = dict(manifest["sampling"], num_ctx=8192, num_predict=1000)
-    result = call("/api/chat", {"model": model, "think": False, "stream": False, "keep_alive": "30m", "truncate": False, "shift": False,
+    thinking, options = mode_config(manifest, mode)
+    result = call("/api/chat", {"model": model, "think": thinking, "stream": False, "keep_alive": "30m", "truncate": False, "shift": False,
         "_debug_render_only": True, "options": options, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
     info = result.get("_debug_info")
     actual = info.get("rendered_template") if isinstance(info, dict) else None
     if not isinstance(actual, str):
         raise ProfileError("qwen35_render_only_missing_rendered_template")
-    if actual != render(system, user):
+    if actual != render(system, user, thinking):
         raise ProfileError("qwen35_runtime_renderer_mismatch")
     if info.get("image_count", 0) != 0:
         raise ProfileError("qwen35_unexpected_media")
@@ -82,6 +82,7 @@ def main():
     parser.add_argument("--resources", required=True)
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
     parser.add_argument("--http-timeout", type=float, default=30)
+    parser.add_argument("--qwen35-mode", choices=("baseline", "greedy", "thinking"), default="baseline")
     args = parser.parse_args()
     try:
         if not 0 < args.http_timeout <= 120:
@@ -93,12 +94,14 @@ def main():
         keys = {"system", "user"} if args.mode == "count" else {"system", "user", "base_url", "model"}
         if not isinstance(request, dict) or set(request) != keys or any(not isinstance(v, str) for v in request.values()):
             raise ProfileError("qwen35_invalid_request")
-        manifest, tokens = count(args.resources, request["system"], request["user"])
+        manifest, tokens = count(args.resources, request["system"], request["user"], args.qwen35_mode == "thinking")
+        _, options = mode_config(manifest, args.qwen35_mode)
+        reserve = options["num_predict"]
         if args.mode == "count":
-            result = {"input_tokens": len(tokens), "output_reserve": 1000, "context_tokens": 8192,
-                "required_tokens": len(tokens) + 1000, "remaining_tokens": 7192 - len(tokens), "method": METHOD, "compatibility_verified": False}
+            result = {"input_tokens": len(tokens), "output_reserve": reserve, "context_tokens": 8192,
+                "required_tokens": len(tokens) + reserve, "remaining_tokens": 8192 - reserve - len(tokens), "method": METHOD, "compatibility_verified": False}
         else:
-            result = verify(manifest, request["base_url"], request["model"], request["system"], request["user"], args.http_timeout)
+            result = verify(manifest, request["base_url"], request["model"], request["system"], request["user"], args.http_timeout, args.qwen35_mode)
         print(json.dumps(result))
         return 0
     except ProfileError as error:

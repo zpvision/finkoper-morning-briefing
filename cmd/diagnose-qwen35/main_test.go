@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,13 +13,20 @@ import (
 	"sync"
 	"testing"
 
+	"finkoper-morning-briefing/internal/briefing"
 	"finkoper-morning-briefing/internal/diagnostic"
+	"finkoper-morning-briefing/internal/evaluation"
 )
 
 func TestExplicitProfileAndAction(t *testing.T) {
 	for _, args := range [][]string{nil, {"--profile", "qwen3-8b"}, {"--profile", diagnostic.Qwen35Profile, "--check-profile", "--run"}, {"--profile", diagnostic.Qwen35Profile, "--case", "unknown"}} {
 		if run(args, &bytes.Buffer{}) == nil {
 			t.Fatal("unsafe arguments accepted")
+		}
+	}
+	for _, name := range []string{"", "invalid"} {
+		if run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name}, &bytes.Buffer{}) == nil {
+			t.Fatal("invalid mode")
 		}
 	}
 }
@@ -68,6 +76,7 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 	manifest, _ := diagnostic.Qwen35PinnedManifest()
 	generations := 0
 	mode := "ok"
+	generationMode := "baseline"
 	var eventLock sync.Mutex
 	var events []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +107,8 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 				Messages []struct{ Content string }
 			}
 			json.NewDecoder(r.Body).Decode(&p)
-			if p.Think || p.Options["num_ctx"] != 8192 || p.Options["num_predict"] != 1000 || p.Options["temperature"] != 0.7 || p.Messages[0].Content != diagnostic.SummaryPromptV2 {
+			config, _ := diagnostic.Qwen35Configuration(generationMode)
+			if p.Think != config.Thinking || p.Options["num_ctx"] != 8192 || p.Options["num_predict"] != float64(config.Reserve) || p.Options["temperature"] != config.Options["temperature"].(float64) || p.Options["top_p"] != config.Options["top_p"].(float64) || p.Options["presence_penalty"] != config.Options["presence_penalty"].(float64) || p.Messages[0].Content != diagnostic.SummaryPromptV2 {
 				t.Error("request mismatch")
 			}
 			if p.Debug {
@@ -106,9 +116,12 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 					json.NewEncoder(w).Encode(map[string]any{"_debug_info": nil})
 					return
 				}
-				rendered := diagnostic.Qwen35Render(p.Messages[0].Content, p.Messages[1].Content)
+				rendered := diagnostic.Qwen35Render(p.Messages[0].Content, p.Messages[1].Content, config.Thinking)
 				if mode == "passthrough" {
 					rendered = "{{ .Prompt }}"
+				}
+				if mode == "wrong_thinking" {
+					rendered = diagnostic.Qwen35Render(p.Messages[0].Content, p.Messages[1].Content, false)
 				}
 				json.NewEncoder(w).Encode(map[string]any{"_debug_info": map[string]string{"rendered_template": rendered}})
 				return
@@ -169,5 +182,49 @@ func TestActualQwen35CPUHelperLocalRuntimeMock(t *testing.T) {
 		eventLock.Lock()
 		defer eventLock.Unlock()
 		t.Fatalf("count mismatch: err=%v generations=%d records=%d code=%s requests=%v", err, generations, strings.Count(strings.TrimSpace(output.String()), "\n")+1, code, events)
+	}
+	inputs, err := evaluation.LoadFiles([]string{casePaths["sr-01"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, user := briefing.PromptInput(inputs[0].Input)
+	for _, name := range []string{"greedy", "thinking"} {
+		generationMode, mode = name, "ok"
+		counter, err := diagnostic.NewQwen35CounterMode("", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan.Budget, err = counter.Count(context.Background(), diagnostic.SummaryPromptV2, user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before := generations
+		if name == "thinking" {
+			mode = "wrong_thinking"
+			output.Reset()
+			err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, "--run"}, &output)
+			var rejected report
+			json.Unmarshal(output.Bytes(), &rejected)
+			if err == nil || generations != before || rejected.Error == nil || *rejected.Error != "qwen35_runtime_renderer_mismatch" {
+				t.Fatal("thinking helper accepted non-thinking renderer", output.String())
+			}
+			mode = "ok"
+		}
+		for _, action := range []string{"--check-profile", "--run"} {
+			output.Reset()
+			if err := run([]string{"--profile", diagnostic.Qwen35Profile, "--mode", name, action}, &output); err != nil {
+				t.Fatalf("%s %s: %v %s", name, action, err, output.String())
+			}
+			var result report
+			if json.Unmarshal(output.Bytes(), &result) != nil || result.GenerationMode != name || strings.Contains(output.String(), "PRIVATE_REASONING") {
+				t.Fatal("mode report")
+			}
+			if action == "--check-profile" && generations != before {
+				t.Fatal("check generated")
+			}
+			if action == "--run" && (generations != before+1 || result.RuntimeTokenCountVerified == nil || !*result.RuntimeTokenCountVerified) {
+				t.Fatal("mode count/retries")
+			}
+		}
 	}
 }

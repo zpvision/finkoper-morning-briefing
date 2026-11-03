@@ -2,6 +2,8 @@
 
 Для Qwen3.5 9B добавлен [независимый диагностический профиль](../../docs/qwen35-9b-profile.md): `prepare_qwen35.py`, отдельные pinned assets/manifest и `qwen35_helper.py`. Он не использует renderer/tokenizer 8B, не подключается автоматически к Ollama и не меняет рабочий счётчик. Подтверждение runtime-рендеринга и сверка числа токенов пробы отмечаются отдельно.
 
+Его явный CLI-only флаг `--qwen35-mode baseline|greedy|thinking` согласует renderer, sampling и полный резерв (1000/4096) с [режимами diagnose-qwen35](../../docs/qwen35-mode-comparison.md). Manifest и ресурсы не меняются; режим рабочего API этим флагом не настраивается.
+
 Для [новой summary-диагностики](../../docs/summary-diagnostics.md) есть явный флаг helper `--summary`: только 8B/think=false, резерв 1000 в подсчёте и render-only. По умолчанию рабочий резерв остаётся 1500; прежние профили не меняются.
 
 Отдельный проверенный диагностический [профиль 14B](../../docs/qwen3-14b-profile.md) готовится инструментом `prepare_14b_profile.py` в новую директорию. Ресурсы 8B не перезаписываются. Helper принимает manifest 14B только с явным `--diagnostic-profile qwen3-14b-q4-k-m-v1`; профиль рабочего сервиса по умолчанию не меняется.
