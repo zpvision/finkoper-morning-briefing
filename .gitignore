@@ -13,6 +13,9 @@ bin/
 /qwen35-9b-show.json
 /ollama-version.txt
 /ollama-tags.json
+/qwen27-show.json
+/ollama-tags(1).json
+/ollama-version.json
 /context_budget.py
 /qwen3-tokenizer.tar.gz
 /.venv-budget/

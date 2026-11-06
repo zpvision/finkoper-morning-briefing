@@ -83,6 +83,7 @@ type Runner struct {
 	VerifyOnly     bool // Explicit diagnostic check: render and metadata, no generation.
 	Qwen35Profile  bool // Pinned diagnostic profile, separate tokenizer/renderer from 8B.
 	Qwen35Mode     string
+	Qwen27Profile  bool
 }
 
 func NewRunner(base, model string, timeout time.Duration, counter briefing.BudgetCounter) *Runner {
@@ -199,7 +200,15 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	start := time.Now()
 	defer func() { elapsed := time.Since(start).Milliseconds(); out.Metrics.Processing = &elapsed }()
 	failure := func(code string) { out.Error = &code }
-	if r.Qwen35Profile && (qwen35Err != nil || !r.SummaryMode || r.Thinking != qwen35.Thinking || r.Model != Qwen35Model) {
+	expectedQwenModel := Qwen35Model
+	if r.Qwen27Profile {
+		expectedQwenModel = Qwen27Model
+	}
+	if r.Qwen27Profile && (!r.Qwen35Profile || r.Qwen35Mode != "baseline" || r.Thinking) {
+		failure("invalid_qwen27_profile")
+		return
+	}
+	if r.Qwen35Profile && (qwen35Err != nil || !r.SummaryMode || r.Thinking != qwen35.Thinking || r.Model != expectedQwenModel) {
 		failure("invalid_qwen35_diagnostic_profile")
 		return
 	}
@@ -209,6 +218,9 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	}
 	if r.Qwen35Profile {
 		out.ComparisonNote = qwen35.Note + " Render/model check is not runtime token-count confirmation."
+		if r.Qwen27Profile {
+			out.ComparisonNote = "27B / Ollama 0.40.15, same frozen summary-v2/schema and options as 9B baseline. The 0.40.5 source is only a renderer reference; exact runtime render and per-request token count must match."
+		}
 	}
 	if r.Thinking && !r.Qwen35Profile {
 		out.ComparisonNote = "Compared with A: think, sampling, generation reserve and timeout change; this does not isolate think alone."

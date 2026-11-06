@@ -9,13 +9,13 @@ import urllib.request
 
 from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # Trusted sibling module; -I excludes cwd/PYTHONPATH.
-from qwen35_profile import ProfileError, METHOD, check_show, load_files, render, mode_config
+from qwen35_profile import PROFILE, PROFILE27, ProfileError, METHOD, check_show, load_files, render, mode_config
 
 MAX_RESPONSE = 32 * 1024 * 1024
 
 
-def count(directory, system, user, thinking=False):
-    manifest, files = load_files(directory)
+def count(directory, system, user, thinking=False, profile=PROFILE):
+    manifest, files = load_files(directory, profile)
     if sys.prefix == sys.base_prefix or importlib.metadata.version("tokenizers") != "0.22.1":
         raise ProfileError("qwen35_requires_tokenizers_0_22_1_venv")
     tokenizer = Tokenizer.from_str(files["tokenizer.json"].decode())
@@ -77,7 +77,7 @@ def verify(manifest, base, model, system, user, timeout, mode="baseline"):
     return {"verified": True, "model_digest": manifest["model_digest"], "ollama_version": manifest["ollama_version"], "template_sha256": manifest["template_sha256"], "method": METHOD}
 
 
-def main():
+def main(profile=PROFILE):
     parser = argparse.ArgumentParser()
     parser.add_argument("--resources", required=True)
     parser.add_argument("--mode", choices=("count", "verify"), required=True)
@@ -85,6 +85,8 @@ def main():
     parser.add_argument("--qwen35-mode", choices=("baseline", "greedy", "thinking", "thinking-long"), default="baseline")
     args = parser.parse_args()
     try:
+        if profile == PROFILE27 and args.qwen35_mode != "baseline":
+            raise ProfileError("qwen35_helper_failed")
         if not 0 < args.http_timeout <= 120:
             raise ProfileError("qwen35_invalid_timeout")
         raw = sys.stdin.buffer.read(2 * 1024 * 1024 + 1)
@@ -94,7 +96,7 @@ def main():
         keys = {"system", "user"} if args.mode == "count" else {"system", "user", "base_url", "model"}
         if not isinstance(request, dict) or set(request) != keys or any(not isinstance(v, str) for v in request.values()):
             raise ProfileError("qwen35_invalid_request")
-        manifest, tokens = count(args.resources, request["system"], request["user"], args.qwen35_mode in ("thinking", "thinking-long"))
+        manifest, tokens = count(args.resources, request["system"], request["user"], args.qwen35_mode in ("thinking", "thinking-long"), profile)
         _, options = mode_config(manifest, args.qwen35_mode)
         reserve = options["num_predict"]
         if args.mode == "count":

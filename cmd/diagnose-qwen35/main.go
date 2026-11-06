@@ -74,21 +74,22 @@ func selectCaseIDs(mode, selected string) ([]string, error) {
 
 type report struct {
 	diagnostic.Record
-	Profile             string    `json:"profile"`
-	GenerationMode      string    `json:"generation_mode"`
-	CallTimeoutMS       int64     `json:"call_timeout_ms"`
-	SamplingSource      string    `json:"sampling_source"`
-	ModeConfigHash      string    `json:"mode_config_sha256"`
-	CaseID              string    `json:"case_id"`
-	AssessmentRole      string    `json:"assessment_role"`
-	SchemaVersion       string    `json:"schema_version"`
-	ProfileManifestHash string    `json:"profile_manifest_sha256"`
-	ExpectedModelDigest string    `json:"expected_model_digest"`
-	ModelDigest         *string   `json:"model_digest"`
-	InputFileHash       string    `json:"input_file_sha256"`
-	OllamaSourceCommit  string    `json:"ollama_source_commit"`
-	HFRevision          string    `json:"hf_revision"`
-	RecordedAt          time.Time `json:"recorded_at"`
+	Profile              string    `json:"profile"`
+	GenerationMode       string    `json:"generation_mode"`
+	CallTimeoutMS        int64     `json:"call_timeout_ms"`
+	SamplingSource       string    `json:"sampling_source"`
+	ModeConfigHash       string    `json:"mode_config_sha256"`
+	CaseID               string    `json:"case_id"`
+	AssessmentRole       string    `json:"assessment_role"`
+	SchemaVersion        string    `json:"schema_version"`
+	ProfileManifestHash  string    `json:"profile_manifest_sha256"`
+	ExpectedModelDigest  string    `json:"expected_model_digest"`
+	ModelDigest          *string   `json:"model_digest"`
+	InputFileHash        string    `json:"input_file_sha256"`
+	OllamaSourceCommit   string    `json:"ollama_source_commit"`
+	HFRevision           string    `json:"hf_revision"`
+	RecordedAt           time.Time `json:"recorded_at"`
+	RuntimeOllamaVersion string    `json:"runtime_ollama_version,omitempty"`
 }
 
 func main() {
@@ -108,7 +109,7 @@ func run(args []string, output io.Writer) error {
 }
 
 // Tests inject only the counter/base URL; production and mock share the HTTP transport.
-func runWithRunner(args []string, output io.Writer, newRunner func(string, string) (*diagnostic.Runner, error)) error {
+func runWithRunner(args []string, output io.Writer, newRunner func(string, string) (*diagnostic.Runner, error), factories27 ...func(string, string) (*diagnostic.Runner, error)) error {
 	flags := flag.NewFlagSet("diagnose-qwen35", flag.ContinueOnError)
 	profile := flags.String("profile", "", "required: qwen35-9b-summary-v2-v1")
 	selected := flags.String("case", "sr-01", "legacy single case or six; thinking-long also sr-01..08, hol-01..10, or regressions (18 inputs)")
@@ -117,7 +118,8 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	check := flags.Bool("check-profile", false, "explicit HTTP metadata/render-only verification; zero generations")
 	execute := flags.Bool("run", false, "explicitly allow one generation per selected case; no retries")
 	out := flags.String("out", "", "new JSONL file; default stdout")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || *profile != diagnostic.Qwen35Profile || (*check && *execute) {
+	probeReport := flags.String("probe-report", "", "successful sr-06 JSONL required before 27B remaining --run")
+	if flags.Parse(args) != nil || flags.NArg() != 0 || (*profile != diagnostic.Qwen35Profile && *profile != diagnostic.Qwen27Profile) || (*check && *execute) {
 		return errors.New("invalid_qwen35_arguments")
 	}
 	if *out != "" && filepath.Ext(*out) != ".jsonl" {
@@ -136,6 +138,15 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 		}
 	}
 	ids, err := selectCaseIDs(*mode, *selected)
+	if *profile == diagnostic.Qwen27Profile {
+		if *mode != "baseline" || (*selected != "six" && *selected != "sr-06" && *selected != "remaining") || (*execute && *selected == "six") {
+			return errors.New("qwen27_requires_baseline_plan_six_or_probe_sr06_or_remaining")
+		}
+		if *selected == "remaining" {
+			ids = []string{"sr-01", "sr-04", "sr-07", "hol-05", "hol-09"}
+			err = nil
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -154,6 +165,23 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	if err != nil {
 		return err
 	}
+	if *profile == diagnostic.Qwen27Profile && *execute && *selected == "remaining" {
+		if err := validate27Probe(*probeReport); err != nil {
+			return err
+		}
+	}
+	if *profile == diagnostic.Qwen27Profile {
+		newRunner = func(resources, mode string) (*diagnostic.Runner, error) {
+			c, err := diagnostic.NewQwen27Counter(resources)
+			if err != nil {
+				return nil, err
+			}
+			return diagnostic.NewQwen27Runner(c.BaseURL, c), nil
+		}
+		if len(factories27) > 0 {
+			newRunner = factories27[0]
+		}
+	}
 	runners := make([]*diagnostic.Runner, 0, len(modes))
 	for _, name := range modes {
 		runner, err := newRunner(*resources, name)
@@ -165,6 +193,9 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 		runners = append(runners, runner)
 	}
 	manifest, pinHash := diagnostic.Qwen35PinnedManifest()
+	if *profile == diagnostic.Qwen27Profile {
+		manifest, pinHash = diagnostic.Qwen27PinnedManifest()
+	}
 	var file *os.File
 	if *out != "" {
 		if os.MkdirAll(filepath.Dir(*out), 0700) != nil {
@@ -189,6 +220,10 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 			record := runner.SummarizeVersion(ctx, input.File, input.Input, diagnostic.SummaryPromptVersionV2, *execute)
 			entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
 			config, _ := diagnostic.Qwen35Configuration(modes[m])
+			entry.Profile = *profile
+			if *profile == diagnostic.Qwen27Profile && record.Budget.Verified {
+				entry.RuntimeOllamaVersion = "0.40.15"
+			}
 			entry.GenerationMode, entry.CallTimeoutMS, entry.SamplingSource = config.Mode, config.Timeout.Milliseconds(), diagnostic.Qwen35SamplingSource
 			configRaw, _ := json.Marshal(map[string]any{"mode": config.Mode, "think": config.Thinking, "reserve": config.Reserve, "timeout_ms": entry.CallTimeoutMS, "options": config.Options})
 			entry.ModeConfigHash = diagnostic.Hash(string(configRaw))

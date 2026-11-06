@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 
 PROFILE = "qwen35-9b-summary-v2-v1"
+PROFILE27 = "qwen35-27b-summary-v2-v1"
+PIN27 = "50c7525a1398acb8971798701e6df3a4204f291f1c4d0fde8335a653c30787a6"
 PIN_SHA256 = "e9aeb0ccd5b2d1f2f952ba1486055c57e8635a93c693c3924b23904ddf9e1e51"
 METHOD = "qwen35_tokenizers_pinned_renderer_no_normalization"
 
@@ -17,15 +19,16 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def pin(raw):
-    if sha(raw) != PIN_SHA256:
+def pin(raw, profile=PROFILE):
+    expected = {PROFILE: PIN_SHA256, PROFILE27: PIN27}.get(profile)
+    if expected is None or sha(raw) != expected:
         raise ProfileError("qwen35_manifest_pin_mismatch")
     return json.loads(raw)
 
 
-def load_files(directory):
+def load_files(directory, profile=PROFILE):
     directory = Path(directory)
-    manifest = pin((directory / "manifest.json").read_bytes())
+    manifest = pin((directory / "manifest.json").read_bytes(), profile)
     files = {}
     for name, source in manifest["sources"].items():
         raw = (directory / name).read_bytes()
@@ -52,9 +55,9 @@ def check_show(show, manifest):
         raise ProfileError("qwen35_model_metadata_mismatch")
 
 
-def validate_exports(directory, show, tags, version):
-    manifest, files = load_files(directory)
-    if version.strip() != "ollama version is 0.40.5":
+def validate_exports(directory, show, tags, version, profile=PROFILE):
+    manifest, files = load_files(directory, profile)
+    if version.strip() != "ollama version is " + manifest["ollama_version"]:
         raise ProfileError("qwen35_ollama_version_mismatch")
     check_show(show, manifest)
     matches = [m for m in tags.get("models", []) if m.get("name") == manifest["model"] or m.get("model") == manifest["model"]]

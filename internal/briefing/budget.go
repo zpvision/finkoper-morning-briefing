@@ -58,13 +58,14 @@ type PythonCounter struct {
 	Python, Script, Resources, BaseURL, Model string
 	Timeout                                   time.Duration
 	// Explicit diagnostic-only opt-in; never set by service configuration.
-	DiagnosticThinking     bool
-	DiagnosticSummary      bool   // CLI-only summary reserve=1000; production default is unchanged.
-	DiagnosticProfile      string // Explicit CLI-only profile, never set by service configuration.
-	DiagnosticBudgetMethod string // Explicit diagnostic factory only; default remains the 8B method.
-	DiagnosticQwen35Mode   string // CLI-only mode for the independent Qwen3.5 helper.
-	slot                   chan struct{}
-	verified               atomic.Bool
+	DiagnosticThinking      bool
+	DiagnosticSummary       bool   // CLI-only summary reserve=1000; production default is unchanged.
+	DiagnosticProfile       string // Explicit CLI-only profile, never set by service configuration.
+	DiagnosticBudgetMethod  string // Explicit diagnostic factory only; default remains the 8B method.
+	DiagnosticQwen35Mode    string // CLI-only mode for the independent Qwen3.5 helper.
+	DiagnosticOllamaVersion string // Explicit diagnostic factory only; production remains 0.40.5.
+	slot                    chan struct{}
+	verified                atomic.Bool
 }
 
 func NewPythonCounter() (*PythonCounter, error) {
@@ -217,7 +218,11 @@ func (p *PythonCounter) Verify(ctx context.Context, system, user string) error {
 	if p.DiagnosticBudgetMethod != "" {
 		expectedMethod = p.DiagnosticBudgetMethod
 	}
-	if !result.Verified || result.Version != "0.40.5" || len(result.Digest) != 64 || len(result.Template) != 64 || result.Method != expectedMethod {
+	expectedVersion := "0.40.5"
+	if p.DiagnosticOllamaVersion != "" {
+		expectedVersion = p.DiagnosticOllamaVersion
+	}
+	if !result.Verified || result.Version != expectedVersion || len(result.Digest) != 64 || len(result.Template) != 64 || result.Method != expectedMethod {
 		p.verified.Store(false)
 		return errors.New("budget_helper_invalid_response")
 	}
