@@ -219,7 +219,7 @@ func (r *Runner) execute(ctx context.Context, file string, v Variant, user strin
 	if r.Qwen35Profile {
 		out.ComparisonNote = qwen35.Note + " Render/model check is not runtime token-count confirmation."
 		if r.Qwen27Profile {
-			out.ComparisonNote = "27B / Ollama 0.40.15, same frozen summary-v2/schema and options as 9B baseline. The 0.40.5 source is only a renderer reference; exact runtime render and per-request token count must match."
+			out.ComparisonNote = "27B / Ollama 0.40.15, summary-v1 and options fixed to 9B baseline; prompt version/hash recorded separately. The 0.40.5 source is only a renderer reference; exact runtime render and per-request token count must match."
 		}
 	}
 	if r.Thinking && !r.Qwen35Profile {

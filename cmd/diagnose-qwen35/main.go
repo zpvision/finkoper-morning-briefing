@@ -121,6 +121,7 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	probeReport := flags.String("probe-report", "", "successful sr-06 JSONL required before 27B remaining --run")
 	inputDir := flags.String("input-dir", "", "external input JSON directory, 27B baseline only; default first-six")
 	reviewedFirst := flags.Bool("reviewed-first", false, "operator reviewed first six before external remaining --run")
+	prompt := flags.String("prompt", "v2", "v2 (default), or 27B external first-six only: v5, compare-v2-v5")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || (*profile != diagnostic.Qwen35Profile && *profile != diagnostic.Qwen27Profile) || (*check && *execute) {
 		return errors.New("invalid_qwen35_arguments")
 	}
@@ -171,7 +172,21 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	if err != nil {
 		return err
 	}
-	if len(ids)*len(modes) > 18 {
+	versions := []string{diagnostic.SummaryPromptVersionV2}
+	switch *prompt {
+	case "v2":
+	case "v5", "compare-v2-v5":
+		if *profile != diagnostic.Qwen27Profile || *inputDir == "" || *selected != "first-six" || *mode != "baseline" {
+			return errors.New("new_prompt_requires_qwen27_external_first_six")
+		}
+		versions = []string{diagnostic.SummaryPromptVersionV5}
+		if *prompt == "compare-v2-v5" {
+			versions = []string{diagnostic.SummaryPromptVersionV2, diagnostic.SummaryPromptVersionV5}
+		}
+	default:
+		return errors.New("unknown_summary_prompt")
+	}
+	if len(ids)*len(modes)*len(versions) > 18 {
 		return errors.New("qwen35_generation_limit_exceeded")
 	}
 	paths := []string{}
@@ -239,37 +254,39 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	failed := false
 	for i, input := range inputs {
 		for m, runner := range runners {
-			if ctx.Err() != nil {
-				return errors.New("qwen35_cancelled")
-			}
-			record := runner.SummarizeVersion(ctx, input.File, input.Input, diagnostic.SummaryPromptVersionV2, *execute)
-			entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
-			config, _ := diagnostic.Qwen35Configuration(modes[m])
-			entry.Profile = *profile
-			if *inputDir != "" {
-				entry.AssessmentRole = "synthetic_external"
-			}
-			if *profile == diagnostic.Qwen27Profile && record.Budget.Verified {
-				entry.RuntimeOllamaVersion = "0.40.15"
-			}
-			entry.GenerationMode, entry.CallTimeoutMS, entry.SamplingSource = config.Mode, config.Timeout.Milliseconds(), diagnostic.Qwen35SamplingSource
-			configRaw, _ := json.Marshal(map[string]any{"mode": config.Mode, "think": config.Thinking, "reserve": config.Reserve, "timeout_ms": entry.CallTimeoutMS, "options": config.Options})
-			entry.ModeConfigHash = diagnostic.Hash(string(configRaw))
-			if record.Budget.Verified {
-				entry.ModelDigest = &manifest.Digest
-			}
-			if encoder.Encode(entry) != nil {
-				return errors.New("qwen35_output_failed")
-			}
-			failed = failed || diagnostic.Failed(record)
-			// Per-input budget refusal is not a model/resource incompatibility.
-			// Keep legacy modes' behavior unchanged; long regressions continue safely.
-			if modes[m] == "thinking-long" && record.Error != nil && *record.Error == "input_budget_exceeded" {
-				continue
-			}
-			// Stop on compatibility/count mismatch even if the sole probe already generated.
-			if diagnostic.PreflightFailed(record) || (record.RuntimeTokenCountVerified != nil && !*record.RuntimeTokenCountVerified) {
-				return errors.New("qwen35_compatibility_failed")
+			for _, version := range versions {
+				if ctx.Err() != nil {
+					return errors.New("qwen35_cancelled")
+				}
+				record := runner.SummarizeVersion(ctx, input.File, input.Input, version, *execute)
+				entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
+				config, _ := diagnostic.Qwen35Configuration(modes[m])
+				entry.Profile = *profile
+				if *inputDir != "" {
+					entry.AssessmentRole = "synthetic_external"
+				}
+				if *profile == diagnostic.Qwen27Profile && record.Budget.Verified {
+					entry.RuntimeOllamaVersion = "0.40.15"
+				}
+				entry.GenerationMode, entry.CallTimeoutMS, entry.SamplingSource = config.Mode, config.Timeout.Milliseconds(), diagnostic.Qwen35SamplingSource
+				configRaw, _ := json.Marshal(map[string]any{"mode": config.Mode, "think": config.Thinking, "reserve": config.Reserve, "timeout_ms": entry.CallTimeoutMS, "options": config.Options})
+				entry.ModeConfigHash = diagnostic.Hash(string(configRaw))
+				if record.Budget.Verified {
+					entry.ModelDigest = &manifest.Digest
+				}
+				if encoder.Encode(entry) != nil {
+					return errors.New("qwen35_output_failed")
+				}
+				failed = failed || diagnostic.Failed(record)
+				// Per-input budget refusal is not a model/resource incompatibility.
+				// Keep legacy modes' behavior unchanged; long regressions continue safely.
+				if modes[m] == "thinking-long" && record.Error != nil && *record.Error == "input_budget_exceeded" {
+					continue
+				}
+				// Stop on compatibility/count mismatch even if the sole probe already generated.
+				if diagnostic.PreflightFailed(record) || (record.RuntimeTokenCountVerified != nil && !*record.RuntimeTokenCountVerified) {
+					return errors.New("qwen35_compatibility_failed")
+				}
 			}
 		}
 	}

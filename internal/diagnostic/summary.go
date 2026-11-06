@@ -13,6 +13,7 @@ import (
 const SummaryPromptVersion = "diagnostic-summary-v4"
 const SummaryPromptVersionV2 = "diagnostic-summary-v2"
 const SummaryPromptVersionV3 = "diagnostic-summary-v3"
+const SummaryPromptVersionV5 = "diagnostic-summary-v5"
 const SummarySchemaVersion = "summary-v1"
 const SummaryReserve = 1000
 
@@ -33,6 +34,9 @@ context_messages используй только для понимания но�
 В source_message_ids выбери сообщения, подтверждающие содержание, включая использованный контекст, уточнения, отмены и ответы. Не ограничивайся одним «да» или «спасибо» и не добавляй все входные ID автоматически. Нужен хотя бы один источник из messages, включая вывод об отсутствии просьб. Наличие ID само по себе не означает полноты и верности сводки.`
 
 const SummarySchema = `{"type":"object","additionalProperties":false,"required":["summary","source_message_ids"],"properties":{"summary":{"type":"string","minLength":1,"description":"Связная содержательная сводка обращений и ответов за период на русском."},"source_message_ids":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1},"description":"ID сообщений, подтверждающих выводы сводки; хотя бы один из messages."}}}`
+
+// Separate 27B experiment based on the byte-frozen v2; no evaluation cases/examples.
+const SummaryPromptV5 = SummaryPromptV2 + "\nСохраняй точное название и вид запрошенного документа; не подменяй его другим видом документа. Различай обещание выполнить действие, сообщение о фактическом начале и сообщение о завершении: обещание не подтверждает начало или завершение, а начало не подтверждает завершение. Передавай только тот этап, который явно указан в переписке."
 
 type SummaryResult struct {
 	Summary string   `json:"summary"`
@@ -104,7 +108,7 @@ func SummaryComparisonVariants(pair string) ([]Variant, error) {
 }
 
 func (r *Runner) SummarizeVersion(ctx context.Context, file string, in briefing.Input, version string, run bool) Record {
-	if r.Qwen35Profile && version != SummaryPromptVersionV2 {
+	if r.Qwen35Profile && version != SummaryPromptVersionV2 && !(r.Qwen27Profile && version == SummaryPromptVersionV5) {
 		code := "qwen35_requires_frozen_summary_v2"
 		return Record{File: file, Model: r.Model, Error: &code}
 	}
@@ -115,6 +119,9 @@ func (r *Runner) SummarizeVersion(ctx context.Context, file string, in briefing.
 	_, user := briefing.PromptInput(in)
 	variants, _ := SummaryComparisonVariants("v2-v4")
 	variants = append(variants, SummaryVariants()[1])
+	if r.Qwen27Profile {
+		variants = append(variants, Variant{"SUMMARY-V5", SummaryPromptV5, SummaryPromptVersionV5, json.RawMessage(SummarySchema)})
+	}
 	for _, variant := range variants {
 		if variant.PromptVersion == version {
 			return r.execute(ctx, file, variant, user, run, func(raw []byte) error { _, err := ValidateSummary(raw, in); return err })

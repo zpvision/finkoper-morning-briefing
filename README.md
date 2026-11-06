@@ -1,5 +1,7 @@
 # Утренний обзор FinKoper
 
+[Сравнение v2/v5 на 27B](docs/qwen27-prompt-comparison.md): связный пересказ с уточнением вида документа и этапа действия. Явный --prompt compare-v2-v5, только первые шесть внешних входов, план без сети; V2 и рабочий API сохранены.
+
 [Внешние синтетические JSON для 27B](docs/qwen27-external-inputs.md): --input-dir, сначала syn-01…syn-06, затем отдельный remaining с --reviewed-first. review.md остаётся только для ручной оценки.
 
 [Отдельный профиль Qwen3.5 27B / Ollama 0.40.15](docs/qwen27.md): неизменённый summary-v2, baseline 9B, отдельный manifest, точный runtime render-only и проверка count. Сначала sr-06, затем отдельно остальные пять; рабочие режимы 9B не меняются.
