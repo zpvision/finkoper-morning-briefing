@@ -1,0 +1,77 @@
+{
+  "gpt-oss": {
+    "repo": "openai/gpt-oss-20b",
+    "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+    "sources": {
+      "tokenizer.json": {
+        "url": "https://huggingface.co/openai/gpt-oss-20b/resolve/6cee5e81ee83917806bbde320786a8fb61efebee/tokenizer.json",
+        "sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+        "bytes": 27868174
+      },
+      "tokenizer_config.json": {
+        "url": "https://huggingface.co/openai/gpt-oss-20b/resolve/6cee5e81ee83917806bbde320786a8fb61efebee/tokenizer_config.json",
+        "sha256": "9279e942392b742d633c7adbb89ebe002c98399db8926a7af5125c726f404070",
+        "bytes": 4200
+      }
+    },
+    "model": "gpt-oss:20b",
+    "digest": "f38aa0c53da5f8c49d08c43a99df24ff53167fe68e24664a7777288e7656fdfe",
+    "think": "low",
+    "reserve": 4096,
+    "ollama_version": "0.40.15",
+    "template_sha256": "fa6710a93d78da62641e192361344be7a8c0a1c3737f139cf89f20ce1626b99c",
+    "tokenizer_metadata_sha256": "09d4862b296fbca10d0776c4ee1eb5906eb2c3cfc2b4a8630034abe46ca94f8f",
+    "model_default_parameters": "temperature                    1",
+    "normalizer": null
+  },
+  "gemma4": {
+    "repo": "google/gemma-4-26B-A4B-it",
+    "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+    "sources": {
+      "tokenizer.json": {
+        "url": "https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/tokenizer.json",
+        "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+        "bytes": 32169626
+      },
+      "tokenizer_config.json": {
+        "url": "https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/tokenizer_config.json",
+        "sha256": "9f4fec4b1dc6ecddf8f4a92e9caea5971c0e67d81309f3f9066a2bee8c362633",
+        "bytes": 3082
+      }
+    },
+    "model": "gemma4:26b",
+    "digest": "001e5dafc3c77684c2307ebc6ab8e336e10c9b18eca52acf547d72fc83c3ca8c",
+    "think": false,
+    "reserve": 1000,
+    "ollama_version": "0.40.15",
+    "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+    "tokenizer_metadata_sha256": "b3b193fd49138f583464a37971e12678b46d074d2d7bec1685b2dbb73035cc50",
+    "model_default_parameters": "draft_num_predict              3\ntemperature                    1\ntop_k                          64\ntop_p                          0.95",
+    "normalizer": {
+      "type": "Replace",
+      "pattern": {
+        "String": " "
+      },
+      "content": "\u2581"
+    },
+    "effective_renderer": "gemma4-large",
+    "renderer_sources": {
+      "model/renderers/gemma4.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/model/renderers/gemma4.go",
+        "sha256": "5d6b33862fdbf14f1c6ae64d927eacac8e19dd9cb5398a23f66f6740b1bdf72d"
+      },
+      "server/renderer_resolution.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/server/renderer_resolution.go",
+        "sha256": "d86864240d854d3955f7b575fbb0a7b34f27abafa5c2daa98083538cf9f6c789"
+      },
+      "model/renderers/renderer.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/model/renderers/renderer.go",
+        "sha256": "93cf8038959807f620af5ca8ab3f478e09397e1339d41e65686ecd2b151bef65"
+      },
+      "llm/llama_server.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/llm/llama_server.go",
+        "sha256": "f2510e68f4fce8ec75fc49710306baec2dfb879b061cd2b4822a14bde6e68387"
+      }
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # Утренний обзор FinKoper
 
+[Отдельное сравнение GPT-OSS/Gemma с Qwen v2](docs/alternative-models.md): две syn-02 пробы, затем по пять оставшихся при успешном допуске; отдельные tokenizer/renderer проверки и JSONL, без рабочего API и остальных 18 входов.
+
 [Сравнение v2/v5 на 27B](docs/qwen27-prompt-comparison.md): связный пересказ с уточнением вида документа и этапа действия. Явный --prompt compare-v2-v5, только первые шесть внешних входов, план без сети; V2 и рабочий API сохранены.
 
 [Внешние синтетические JSON для 27B](docs/qwen27-external-inputs.md): --input-dir, сначала syn-01…syn-06, затем отдельный remaining с --reviewed-first. review.md остаётся только для ручной оценки.

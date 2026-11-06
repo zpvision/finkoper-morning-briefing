@@ -1,0 +1,126 @@
+// Frozen Go contract bridge for separate cross-model diagnostics, never the API.
+package main
+
+import (
+	"encoding/json"
+	"finkoper-morning-briefing/internal/briefing"
+	"finkoper-morning-briefing/internal/diagnostic"
+	"finkoper-morning-briefing/internal/evaluation"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	if err := run(os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+func run(input io.Reader, output io.Writer) error {
+	var req struct {
+		Action, InputDir, Baseline string
+		Input                      json.RawMessage
+		Content                    string
+	}
+	raw, err := io.ReadAll(io.LimitReader(input, 8*briefing.MaxBody))
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(raw, &req); err != nil {
+		return err
+	}
+	if req.Action == "validate" {
+		var in briefing.Input
+		if err := briefing.Strict(req.Input, &in); err != nil {
+			return err
+		}
+		if err := in.Normalize(); err != nil {
+			return err
+		}
+		_, err := diagnostic.ValidateSummary([]byte(req.Content), in)
+		result := map[string]any{"error": nil}
+		if err != nil {
+			result["error"] = err.Error()
+		}
+		return json.NewEncoder(output).Encode(result)
+	}
+	if req.Action != "prepare" {
+		return fmt.Errorf("unknown_contract_action")
+	}
+	paths := []string{}
+	for i := 1; i <= 6; i++ {
+		paths = append(paths, filepath.Join(req.InputDir, fmt.Sprintf("syn-%02d.json", i)))
+	}
+	inputs, err := evaluation.LoadFiles(paths)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(req.Baseline)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	// JSONL Decoder rejects truncated data and duplicate baseline cases.
+	decoder := json.NewDecoder(io.LimitReader(file, 16*briefing.MaxBody))
+	baselines := map[string]json.RawMessage{}
+	for {
+		var row json.RawMessage
+		err := decoder.Decode(&row)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		var header struct {
+			CaseID         string  `json:"case_id"`
+			GenerationMode string  `json:"generation_mode"`
+			ModelDigest    *string `json:"model_digest"`
+			diagnostic.Record
+		}
+		if err := json.Unmarshal(row, &header); err != nil {
+			return err
+		}
+		if header.PromptVersion != diagnostic.SummaryPromptVersionV2 {
+			continue
+		}
+		if _, exists := baselines[header.CaseID]; exists {
+			return fmt.Errorf("duplicate_qwen_baseline")
+		}
+		pin, _ := diagnostic.Qwen27PinnedManifest()
+		actualOptions, _ := json.Marshal(header.Parameters["options"])
+		expectedOptions, _ := json.Marshal(diagnostic.Qwen35Options())
+		if header.Model != diagnostic.Qwen27Model || header.GenerationMode != "baseline" || header.ModelDigest == nil || *header.ModelDigest != pin.Digest || header.Parameters["think"] != false || string(actualOptions) != string(expectedOptions) || diagnostic.Failed(header.Record) || header.Done == nil || !*header.Done || header.DoneReason == nil || *header.DoneReason != "stop" {
+			return fmt.Errorf("invalid_qwen_baseline")
+		}
+		baselines[header.CaseID] = row
+	}
+	contracts := []map[string]any{}
+	for i, input := range inputs {
+		id := fmt.Sprintf("syn-%02d", i+1)
+		row := baselines[id]
+		if row == nil {
+			return fmt.Errorf("missing_qwen_baseline_%s", id)
+		}
+		var ref struct {
+			diagnostic.Record
+			InputHash string `json:"input_file_sha256"`
+		}
+		json.Unmarshal(row, &ref)
+		_, user := briefing.PromptInput(input.Input)
+		if ref.PromptHash != diagnostic.Hash(diagnostic.SummaryPromptV2) || ref.UserHash != diagnostic.Hash(user) || ref.FormatHash != diagnostic.Hash(diagnostic.SummarySchema) || ref.InputHash != input.Hash {
+			return fmt.Errorf("qwen_baseline_contract_mismatch_%s", id)
+		}
+		if _, err := diagnostic.ValidateSummary(ref.Result, input.Input); err != nil {
+			return err
+		}
+		source, err := os.ReadFile(input.File)
+		if err != nil {
+			return err
+		}
+		contracts = append(contracts, map[string]any{"case_id": id, "input": json.RawMessage(source), "user": user, "input_file_sha256": input.Hash, "user_sha256": ref.UserHash, "qwen_baseline": row})
+	}
+	return json.NewEncoder(output).Encode(map[string]any{"prompt": diagnostic.SummaryPromptV2, "prompt_version": diagnostic.SummaryPromptVersionV2, "prompt_sha256": diagnostic.Hash(diagnostic.SummaryPromptV2), "schema": json.RawMessage(diagnostic.SummarySchema), "schema_version": diagnostic.SummarySchemaVersion, "schema_sha256": diagnostic.Hash(diagnostic.SummarySchema), "cases": contracts})
+}
