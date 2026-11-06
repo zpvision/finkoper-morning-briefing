@@ -202,6 +202,8 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
            "ollama_version": manifest.get("ollama_version"),
            "stage_ms": metrics,
            "comparison_note": "Models have different wrappers/tokenizers/think. GPT reserve=4096 includes reasoning; Gemma/Qwen reserve=1000. This does not isolate model or think alone."}
+    for name in ("job_id","repeat_index","job_index"):
+        if name in case:row[name]=case[name]
     if getattr(args,"suite",None)=="gemma-qwen-rest":
         row["comparison_note"]="Gemma/Qwen: same frozen v2 user/schema, think=false, baseline sampling and reserve=1000; native wrappers/tokenizers differ."
     if getattr(args,"suite",None)=="gemma30":
@@ -277,8 +279,24 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
         for name in ("total", "load", "prompt_eval", "eval"):
             duration = response.get(name + "_duration")
             row[name+"_ms"] = None if duration is None else duration/1000000
+        row["cache_signals"]={}
+        for section,data in (("response",response),("debug",response.get("_debug_info",{})),("usage",response.get("usage",{})),("prompt_tokens_details",response.get("usage",{}).get("prompt_tokens_details",{}) if isinstance(response.get("usage"),dict) else {})):
+            if isinstance(data,dict):
+                for name in ("cached_tokens","cache_hit","cache_hits","prompt_cache_hit","prompt_cache_hits","cache_read_input_tokens","prompt_eval_cached_tokens","cached_prompt_tokens","n_past","cache_tokens"):
+                    if isinstance(data.get(name),(bool,int,float)):row["cache_signals"][section+"."+name]=data[name]
+        validation_request={"Action":"validate","Input":case["input"],"Content":content}
+        if "job_id" in case:validation_request["RequestID"]=case["job_id"]+":validate"
+        validator=getattr(args,"profile_validator",None) or bridge
         with measured(metrics,"validation_stage_ms"):
-            row["validation_error"] = bridge(args.bridge, {"Action": "validate", "Input": case["input"], "Content": content},metrics)["error"]
+            validation_response=validator(args.bridge,validation_request,metrics)
+            row["validation_error"] = validation_response["error"]
+        if "RequestID" in validation_request:
+            if validation_response.get("request_id")!=validation_request["RequestID"]:
+                fatal=True
+                raise ValueError("validation_helper_protocol_error")
+            row["validation_request_id"]=validation_response["request_id"]
+            row["validation_helper_pid"]=validation_response.get("process_id")
+            metrics["helper_requests"]=1
         try:
             row["result"] = json.loads(content)
         except ValueError:
@@ -300,14 +318,14 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
             fatal = True
             raise ValueError("model_digest_mismatch")
     except Exception as error:
-        fatal = fatal or not generated
+        fatal = fatal or not generated or getattr(error,"fatal_diagnostic",False)
         # Fixed codes only: never persist an HTTP response body or reasoning in errors.
         row["error"] = str(error) if type(error) is ValueError and str(error) in {
             "render_only_missing_rendered_template", "runtime_render_mismatch", "runtime_date_mismatch",
             "input_budget_exceeded", "model_not_fully_gpu", "model_not_fully_gpu_after_generation",
             "runtime_prompt_eval_count_mismatch", "incomplete_response", "invalid_summary",
             "model_digest_mismatch", "model_template_changed", "runtime_tokenizer_metadata_mismatch",
-            "ollama_version_mismatch", "model_not_resident", "ollama_error"} else "diagnostic_transport_or_contract_error"
+            "ollama_version_mismatch", "model_not_resident", "ollama_error","validation_helper_protocol_error"} else "validation_helper_protocol_error" if getattr(error,"fatal_diagnostic",False) else "diagnostic_transport_or_contract_error"
         row["result"] = None
     row["processing_ms"] = (time.monotonic()-start)*1000
     return row, fatal
@@ -547,6 +565,7 @@ def main():
     p.add_argument("--prepare", action="store_true", help="explicit pinned tokenizer downloads, no Ollama")
     p.add_argument("--run", action="store_true")
     p.add_argument("--profile-gemma30",action="store_true",help="warm current/optimized comparison; concurrent2 only below 1500/hour")
+    p.add_argument("--repeat-helper300",action="store_true",help="300 repeated synthetic jobs per mode, concurrency=2; per-job vs persistent Go helper")
     args = p.parse_args()
     if args.prepare and args.run:
         raise ValueError("prepare_and_run_are_separate")
@@ -555,6 +574,7 @@ def main():
     rest=args.suite=="gemma-qwen-rest"
     gemma30=args.suite=="gemma30"
     if args.profile_gemma30 and not gemma30:raise ValueError("profiling_requires_gemma30")
+    if args.repeat_helper300 and (not gemma30 or args.profile_gemma30):raise ValueError("repeat_helper300_requires_gemma30_and_separate_mode")
     fixed=rest or gemma30
     if fixed and (args.baseline or args.stage!="probes"):raise ValueError("fixed_suite_has_its_own_case_selection")
     if not fixed and args.baseline is None:raise ValueError("qwen_baseline_required")
@@ -563,13 +583,16 @@ def main():
     args.manifest_hash = sha(manifest_path.read_bytes())
     contract_request={"Action": "prepare-gemma30" if gemma30 else "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if fixed else str(args.baseline.resolve())}
     args.contract_telemetry={}
-    contract = bridge(args.bridge.resolve(),contract_request,args.contract_telemetry) if args.profile_gemma30 else bridge(args.bridge.resolve(),contract_request)
+    contract = bridge(args.bridge.resolve(),contract_request,args.contract_telemetry) if args.profile_gemma30 or args.repeat_helper300 else bridge(args.bridge.resolve(),contract_request)
     args.bridge = args.bridge.resolve()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     manifests = json.loads(manifest_path.read_bytes())
     if gemma30: manifests = {"gemma4": manifests["gemma4"]}
     if args.profile_gemma30 and args.run:
         from profile_gemma30 import run_comparison
+        return run_comparison(sys.modules[__name__],args,manifests["gemma4"],contract,manifest_path)
+    if args.repeat_helper300 and args.run:
+        from repeat_helper300 import run_comparison
         return run_comparison(sys.modules[__name__],args,manifests["gemma4"],contract,manifest_path)
     tokenizers = {key: assets(key, m, args.prepare) for key, m in manifests.items()}
     if args.prepare:
@@ -592,6 +615,8 @@ def main():
         plan={"stage":"plan","network":False,"cases":rows,"manifest_sha256":args.manifest_hash,"prompt_sha256":contract["prompt_sha256"],"schema_sha256":contract["schema_sha256"],"plan_ms":(time.monotonic()-plan_started)*1000}
         if args.profile_gemma30:
             plan["profiling"]={"current":30,"optimized":30,"concurrent2_conditional":30,"threshold_per_hour":1500}
+        if args.repeat_helper300:
+            plan["repeat_helper300"]={"per_job_helper":300,"persistent_helper":300,"concurrency":2,"synthetic_repeat":True,"repetitions":10,"job_ids_outside_model_input":True}
         if fixed:(args.out_dir/"plan.json").write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding="utf8")
         print(json.dumps(plan,ensure_ascii=False))
         return int(any(not r["budget_ok"] for r in rows))

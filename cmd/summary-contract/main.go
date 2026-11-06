@@ -14,16 +14,24 @@ import (
 )
 
 func main() {
-	if err := run(os.Stdin, os.Stdout); err != nil {
+	var err error
+	if len(os.Args) == 2 && os.Args[1] == "--serve" {
+		err = serve(os.Stdin, os.Stdout)
+	} else if len(os.Args) != 1 {
+		err = fmt.Errorf("unknown_helper_option")
+	} else {
+		err = run(os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 func run(input io.Reader, output io.Writer) error {
 	var req struct {
-		Action, InputDir, Baseline string
-		Input                      json.RawMessage
-		Content                    string
+		Action, InputDir, Baseline, RequestID string
+		Input                                 json.RawMessage
+		Content                               string
 	}
 	raw, err := io.ReadAll(io.LimitReader(input, 8*briefing.MaxBody))
 	if err != nil {
@@ -43,6 +51,10 @@ func run(input io.Reader, output io.Writer) error {
 		}
 		_, err := diagnostic.ValidateSummary([]byte(req.Content), in)
 		result := map[string]any{"error": nil, "validation_ms": float64(time.Since(validationStarted).Nanoseconds()) / 1e6}
+		if req.RequestID != "" {
+			result["request_id"] = req.RequestID
+			result["process_id"] = os.Getpid()
+		}
 		if err != nil {
 			result["error"] = err.Error()
 		}

@@ -95,14 +95,18 @@ def run_mode(client,args,manifest,contract,mode):
     directory=args.out_dir/mode;directory.mkdir()
     local=argparse.Namespace(**vars(args));local.out_dir=directory
     local.profile_optimized=mode!="current";local.profile_strict=True
-    workers=2 if mode=="concurrent2" else 1
+    workers=2 if mode in ("concurrent2","per_job_helper","persistent_helper") else 1
+    cases=contract.get("jobs",contract["cases"])
+    expected=len(cases)
+    reporter=getattr(args,"profile_reporter",None) or client.gemma30_reports
+    helper=None
     stages={};rows=[];windows=[];error=None;warmup={"warmup_ms":0}
     started=time.monotonic();cases_start=None;last_saved=None
     state=dict(model=manifest["model"],digest=manifest["digest"],ollama_version=manifest["ollama_version"],
                plan_ms=None,initial_ps={},first_case_initially_cold=False,timings=[],batch_ms=0,finished=False,orchestration_error=None)
     def reports():
         with client.measured(stages,"report_update_ms"):
-            client.gemma30_reports(directory,contract,state)
+            reporter(directory,contract,state)
     def persist(row,case_start):
         nonlocal last_saved
         row["profile_mode"]=mode
@@ -110,12 +114,16 @@ def run_mode(client,args,manifest,contract,mode):
             with (directory/"gemma4.jsonl").open("a",encoding="utf8") as output:
                 output.write(json.dumps(row,ensure_ascii=False)+"\n");output.flush();os.fsync(output.fileno())
         last_saved=time.monotonic()
-        windows.append(dict(case_id=row["case_id"],started_offset_ms=(case_start-cases_start)*1000,
+        windows.append(dict(case_id=row["case_id"],job_id=row.get("job_id"),started_offset_ms=(case_start-cases_start)*1000,
                             saved_offset_ms=(last_saved-cases_start)*1000,case_ms=(last_saved-case_start)*1000))
         rows.append(row);add(stages,row["stage_ms"])
-        state.update(timings=windows,batch_ms=(last_saved-cases_start)*1000,finished=len(rows)==30)
+        state.update(timings=windows,batch_ms=(last_saved-cases_start)*1000,finished=len(rows)==expected)
         if mode=="current":reports()
-        print(mode,row["case_id"],"ERROR "+row["error"] if row["error"] else "OK",flush=True)
+        if getattr(args,"repeat_helper300",False):
+            if len(rows)%10==0 or row["error"]:
+                reports()
+                print(mode,f"{len(rows)}/{expected}","ERROR "+row["error"] if row["error"] else "OK",flush=True)
+        else:print(mode,row["case_id"],"ERROR "+row["error"] if row["error"] else "OK",flush=True)
     def job(case,index):
         begin=time.monotonic()
         row,fatal=client.evaluate(local,"gemma4",manifest,contract,case,tokenizer)
@@ -136,13 +144,20 @@ def run_mode(client,args,manifest,contract,mode):
             metrics["metadata_cached_hits"]=metrics.get("metadata_cached_hits",0)+1
             return defaults
         if local.profile_optimized:local.profile_verifier=cached
+        if mode=="persistent_helper":
+            if __package__:
+                from .persistent_bridge import PersistentBridge
+            else:
+                from persistent_bridge import PersistentBridge
+            helper=PersistentBridge([str(args.bridge),"--serve"],stages,args.comparison_id+":"+mode)
+            local.profile_validator=lambda binary,request,metrics:helper.request(request,metrics)
         cases_start=time.monotonic()
         pending={};position=0;stop=False
         with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            while pending or (position<len(contract["cases"]) and not stop):
-                while len(pending)<workers and position<len(contract["cases"]) and not stop:
+            while pending or (position<len(cases) and not stop):
+                while len(pending)<workers and position<len(cases) and not stop:
                     position+=1
-                    pending[pool.submit(job,contract["cases"][position-1],position)]=position
+                    pending[pool.submit(job,cases[position-1],position)]=position
                 done,_=futures.wait(pending,return_when=futures.FIRST_COMPLETED)
                 for future in sorted(done,key=lambda f:pending[f]):
                     pending.pop(future)
@@ -159,9 +174,14 @@ def run_mode(client,args,manifest,contract,mode):
     except Exception as failure:
         error=type(failure).__name__+":"+str(failure) if type(failure) is ValueError else type(failure).__name__
     finally:
+        if helper is not None:
+            try:
+                with client.measured(stages,"helper_shutdown_ms"):helper.close()
+            except Exception:error=error or "persistent_helper_shutdown_failed"
         state["orchestration_error"]=error
         reports();add(stages,{"report_"+k:v for k,v in state.get("report_stage_ms",{}).items()})
-    full_ms=(time.monotonic()-started)*1000-warmup["warmup_ms"]
+    ended=time.monotonic()
+    full_ms=(ended-started)*1000-warmup["warmup_ms"]
     summary=dict(mode=mode,successes=sum(not r["error"] and not r["validation_error"] for r in rows),generations=sum(r["generation_attempts"] for r in rows),
                  full_ms=full_ms,cases_ms=(last_saved-cases_start)*1000 if last_saved else 0,
                  warmup=warmup,stages=stages,error=error,case_errors=[dict(case_id=r["case_id"],error=r["error"],validation_error=r["validation_error"]) for r in rows if r["error"] or r["validation_error"]],
@@ -169,6 +189,9 @@ def run_mode(client,args,manifest,contract,mode):
                  ollama_stats=client.metric_stats([r.get("total_ms") for r in rows]),http_overlap=overlap(rows),
                  input_tokens=sum(r.get("prompt_eval_count") or 0 for r in rows),output_tokens=sum(r.get("eval_count") or 0 for r in rows),
                  verification_policy="two full checks per case" if mode=="current" else "per-input render/budget/resident digest/GPU/runtime count/JSON/sources")
+    summary.update(expected_jobs=expected,fixed_prepare_ms=(cases_start-started)*1000-warmup["warmup_ms"] if cases_start else full_ms,
+                   fixed_finalize_ms=(ended-last_saved)*1000 if last_saved else 0,
+                   helper_pid=helper.pid if helper is not None else None,helper_exit_code=helper.process.returncode if helper is not None else None)
     (directory/"phase.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf8")
     return summary
 
