@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -32,6 +33,7 @@ func run(input io.Reader, output io.Writer) error {
 		return err
 	}
 	if req.Action == "validate" {
+		validationStarted := time.Now()
 		var in briefing.Input
 		if err := briefing.Strict(req.Input, &in); err != nil {
 			return err
@@ -40,7 +42,7 @@ func run(input io.Reader, output io.Writer) error {
 			return err
 		}
 		_, err := diagnostic.ValidateSummary([]byte(req.Content), in)
-		result := map[string]any{"error": nil}
+		result := map[string]any{"error": nil, "validation_ms": float64(time.Since(validationStarted).Nanoseconds()) / 1e6}
 		if err != nil {
 			result["error"] = err.Error()
 		}

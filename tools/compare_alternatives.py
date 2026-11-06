@@ -1,6 +1,7 @@
 """Separate CPU-only client: frozen Go contract, pinned per-model tokenizers, no weights."""
 import argparse
 import atexit
+import contextlib
 import datetime as dt
 import hashlib
 import html
@@ -23,12 +24,32 @@ KNOWN = {"qwen3.5:27b-q4_K_M", "gpt-oss:20b", "gemma4:26b"}
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
-def bridge(binary, request):
-    p = subprocess.run([str(binary)], input=json.dumps(request, ensure_ascii=False).encode(), stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE, timeout=30, check=False)
-    if p.returncode or len(p.stdout) > 8 * 1024 * 1024:
+@contextlib.contextmanager
+def measured(metrics, key):
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        metrics[key] = metrics.get(key, 0)+(time.monotonic()-start)*1000
+
+def bridge(binary, request, telemetry=None):
+    metrics = telemetry if telemetry is not None else {}
+    raw = json.dumps(request, ensure_ascii=False).encode()
+    with measured(metrics, "helper_spawn_ms"):
+        process = subprocess.Popen([str(binary)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    metrics["helper_spawns"] = metrics.get("helper_spawns", 0)+1
+    try:
+        with measured(metrics, "helper_work_wait_ms"):
+            stdout, stderr = process.communicate(raw, timeout=30)
+    except BaseException:
+        process.kill(); process.communicate()
+        raise
+    if process.returncode or len(stdout) > 8 * 1024 * 1024:
         raise ValueError("go_contract_failed")
-    return json.loads(p.stdout)
+    result = json.loads(stdout)
+    if "validation_ms" in result:
+        metrics["go_validation_ms"] = result["validation_ms"]
+    return result
 
 def render(key, system, user, date):
     if key == "qwen-v2":
@@ -58,7 +79,9 @@ def call(base, path, payload=None, timeout=600):
         raise ValueError("ollama_error")
     return result
 
-def assets(key, manifest, prepare=False):
+def assets(key, manifest, prepare=False, telemetry=None):
+    metrics = telemetry if telemetry is not None else {}
+    start = time.monotonic()
     directory = ROOT / "resources/tokenizer" / ("qwen35-27b" if key=="qwen-v2" else key)
     directory.mkdir(parents=True, exist_ok=True)
     for name, pin in manifest["sources"].items():
@@ -72,8 +95,12 @@ def assets(key, manifest, prepare=False):
         raw = path.read_bytes()
         if sha(raw) != pin["sha256"] or len(raw) != pin["bytes"]:
             raise ValueError("tokenizer_checksum_mismatch")
-    from tokenizers import Tokenizer
-    tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    metrics["resource_checksum_ms"] = (time.monotonic()-start)*1000
+    with measured(metrics, "tokenizers_import_ms"):
+        from tokenizers import Tokenizer
+    with measured(metrics, "tokenizer_engine_load_ms"):
+        tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    metrics["tokenizer_engine_loads"] = metrics.get("tokenizer_engine_loads", 0)+1
     if key=="qwen-v2":tokenizer.normalizer=None
     # Retain Gemma's explicit space -> U+2581 mapping; GPT has no normalizer.
     # No Unicode normalization is introduced. Generation text is never changed.
@@ -81,25 +108,38 @@ def assets(key, manifest, prepare=False):
     tokenizer.no_truncation()
     return tokenizer
 
-def verify_show(base, manifest):
+def verify_show(base, manifest, telemetry=None, local_tokenizer=None):
+    metrics = telemetry if telemetry is not None else {}
+    start = time.monotonic()
     if call(base, "/api/version")["version"] != manifest["ollama_version"]:
         raise ValueError("ollama_version_mismatch")
     matches = [m for m in call(base, "/api/tags")["models"] if m.get("name") == manifest["model"]]
     if len(matches) != 1 or matches[0]["digest"] != manifest["digest"]:
         raise ValueError("model_digest_mismatch")
-    show = call(base, "/api/show", {"model": manifest["model"], "verbose": True})
+    metrics["model_identity_ms"] = metrics.get("model_identity_ms",0)+(time.monotonic()-start)*1000
+    with measured(metrics, "metadata_http_ms"):
+        show = call(base, "/api/show", {"model": manifest["model"], "verbose": True})
+    metrics["metadata_full_checks"] = metrics.get("metadata_full_checks",0)+1
+    compare_start = time.monotonic()
     if sha(show["template"].encode()) != manifest["template_sha256"]:
         raise ValueError("model_template_changed")
     metadata = {k: v for k, v in show["model_info"].items() if k.startswith("tokenizer.")}
     if sha(json.dumps(metadata, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode()) != manifest["tokenizer_metadata_sha256"]:
         raise ValueError("runtime_tokenizer_metadata_mismatch")
     key = {"gpt-oss:20b":"gpt-oss", "gemma4:26b":"gemma4", "qwen3.5:27b-q4_K_M":"qwen35-27b"}[manifest["model"]]
-    tokenizer = json.loads((ROOT/"resources/tokenizer"/key/"tokenizer.json").read_bytes())
+    metrics["metadata_hash_ms"] = metrics.get("metadata_hash_ms",0)+(time.monotonic()-compare_start)*1000
+    tokenizer = local_tokenizer
+    if tokenizer is None:
+        with measured(metrics, "tokenizer_json_load_ms"):
+            tokenizer = json.loads((ROOT/"resources/tokenizer"/key/"tokenizer.json").read_bytes())
+        metrics["tokenizer_json_loads"] = metrics.get("tokenizer_json_loads",0)+1
+    compare_start = time.monotonic()
     vocab = metadata["tokenizer.ggml.tokens"]
     if (not all(vocab[i] == text for text,i in tokenizer["model"]["vocab"].items()) or
         metadata["tokenizer.ggml.merges"] != [" ".join(v) if isinstance(v,list) else v for v in tokenizer["model"]["merges"]] or
         not all(vocab[t["id"]] == t["content"] for t in tokenizer["added_tokens"])):
         raise ValueError("runtime_tokenizer_metadata_mismatch")
+    metrics["vocab_compare_ms"] = metrics.get("vocab_compare_ms",0)+(time.monotonic()-compare_start)*1000
     return show.get("parameters")
 
 def gpu(base, model, directory, key):
@@ -142,6 +182,7 @@ def isolate(base):
 
 def evaluate(args, key, manifest, contract, case, tokenizer):
     start = time.monotonic()
+    metrics = {}
     reserve = manifest["reserve"]
     options = dict(temperature=.7, top_p=.8, top_k=20, min_p=0, presence_penalty=1.5, repeat_penalty=1,
                    num_ctx=8192, num_predict=reserve)
@@ -159,6 +200,7 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
            "final_content": None, "validation_error": None, "error": None,
            "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
            "ollama_version": manifest.get("ollama_version"),
+           "stage_ms": metrics,
            "comparison_note": "Models have different wrappers/tokenizers/think. GPT reserve=4096 includes reasoning; Gemma/Qwen reserve=1000. This does not isolate model or think alone."}
     if getattr(args,"suite",None)=="gemma-qwen-rest":
         row["comparison_note"]="Gemma/Qwen: same frozen v2 user/schema, think=false, baseline sampling and reserve=1000; native wrappers/tokenizers differ."
@@ -167,21 +209,26 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
     fatal = False
     generated = False
     try:
-        if getattr(args, "suite", None) == "gemma30":
-            row["resident_before_case"] = call(args.base_url, "/api/ps")
+        if getattr(args, "suite", None) == "gemma30" and not getattr(args,"profile_optimized",False):
+            with measured(metrics,"gpu_status_ms"):
+                row["resident_before_case"] = call(args.base_url, "/api/ps")
         t = time.monotonic()
-        row["model_default_parameters"] = verify_show(args.base_url, manifest)
+        verifier = getattr(args,"profile_verifier",None) or verify_show
+        with measured(metrics,"metadata_verify_ms"):
+            row["model_default_parameters"] = verifier(args.base_url, manifest, metrics)
         debug_start = time.monotonic()
         debug = call(args.base_url, "/api/chat", dict(payload, _debug_render_only=True))
         row["render_only_http_ms"] = (time.monotonic()-debug_start)*1000
+        metrics["render_only_ms"] = row["render_only_http_ms"]
         # Render-only may load the runner. Preserve its timing separately from generation.
         # Missing server metrics remain null; never label wall time as pure load time.
         row["render_only_ollama_ms"] = {
             name: None if debug.get(name+"_duration") is None else debug[name+"_duration"]/1000000
             for name in ("total", "load", "prompt_eval", "eval")}
         row["render_only_done_reason"] = debug.get("done_reason")
-        if getattr(args, "suite", None) == "gemma30":
-            row["resident_after_render_only"] = call(args.base_url, "/api/ps")
+        if getattr(args, "suite", None) == "gemma30" and not getattr(args,"profile_optimized",False):
+            with measured(metrics,"gpu_status_ms"):
+                row["resident_after_render_only"] = call(args.base_url, "/api/ps")
         rendered = debug.get("_debug_info", {}).get("rendered_template")
         if not isinstance(rendered, str):
             raise ValueError("render_only_missing_rendered_template")
@@ -197,19 +244,27 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
         t = time.monotonic()
         tokens = tokenizer.encode(rendered, add_special_tokens=False).ids
         row["tokenizer_ms"] = (time.monotonic()-t)*1000
+        metrics["input_encode_ms"] = row["tokenizer_ms"]
         row["budget"] = dict(input_tokens=len(tokens), output_reserve=reserve, context_tokens=8192,
                              required_tokens=len(tokens)+reserve, method="pinned_model_tokenizers_actual_render")
         if len(tokens)+reserve > 8192:
             raise ValueError("input_budget_exceeded")
-        row["gpu_before"] = gpu(args.base_url, manifest["model"], args.out_dir, key)
+        with measured(metrics,"gpu_status_ms"):
+            row["gpu_before"] = gpu(args.base_url, manifest["model"], args.out_dir, key)
         if not row["gpu_before"]["fully_gpu"]:
             raise ValueError("model_not_fully_gpu")
-        verify_show(args.base_url, manifest)
+        if getattr(args,"profile_strict",False) and row["gpu_before"].get("digest")!=manifest["digest"]:
+            raise ValueError("model_digest_mismatch")
+        with measured(metrics,"metadata_verify_ms"):
+            verifier(args.base_url, manifest, metrics)
         generated = True
         row["generation_attempts"] = 1
         t = time.monotonic()
+        row["generation_started_ns"] = time.monotonic_ns()
         response = call(args.base_url, "/api/chat", payload)
+        row["generation_finished_ns"] = time.monotonic_ns()
         row["http_ms"] = (time.monotonic()-t)*1000
+        metrics["generation_http_ms"] = row["http_ms"]
         message = response.get("message", {})
         thinking = message.pop("thinking", "")
         row["thinking_present"] = bool(thinking)
@@ -222,7 +277,8 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
         for name in ("total", "load", "prompt_eval", "eval"):
             duration = response.get(name + "_duration")
             row[name+"_ms"] = None if duration is None else duration/1000000
-        row["validation_error"] = bridge(args.bridge, {"Action": "validate", "Input": case["input"], "Content": content})["error"]
+        with measured(metrics,"validation_stage_ms"):
+            row["validation_error"] = bridge(args.bridge, {"Action": "validate", "Input": case["input"], "Content": content},metrics)["error"]
         try:
             row["result"] = json.loads(content)
         except ValueError:
@@ -235,10 +291,14 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
             raise ValueError("incomplete_response")
         if row["validation_error"]:
             raise ValueError("invalid_summary")
-        row["gpu_after"] = gpu(args.base_url, manifest["model"], args.out_dir, key)
+        with measured(metrics,"gpu_status_ms"):
+            row["gpu_after"] = gpu(args.base_url, manifest["model"], args.out_dir, key)
         if not row["gpu_after"]["fully_gpu"]:
             fatal = True
             raise ValueError("model_not_fully_gpu_after_generation")
+        if getattr(args,"profile_strict",False) and row["gpu_after"].get("digest")!=manifest["digest"]:
+            fatal = True
+            raise ValueError("model_digest_mismatch")
     except Exception as error:
         fatal = fatal or not generated
         # Fixed codes only: never persist an HTTP response body or reasoning in errors.
@@ -346,7 +406,8 @@ def gemma30_reports(directory, contract, state):
         else:
             answer = cell(row["result"]["summary"])+"<br><br>Источники: "+cell(", ".join(row["result"]["source_message_ids"]))
         lines += ["## "+case["case_id"], "", "| Исходные письма | Ответ Gemma |", "|---|---|", "| "+"<br><br>".join(letters)+" | "+answer+" |", ""]
-    (directory/"comparison.md").write_text("\n".join(lines), encoding="utf8")
+    with measured(state.setdefault("report_stage_ms",{}),"comparison_markdown_ms"):
+        (directory/"comparison.md").write_text("\n".join(lines), encoding="utf8")
     stats = {"case_until_fsync": metric_stats([r["case_ms"] for r in state.get("timings", [])]),
              "generation_http": metric_stats([r.get("http_ms") for r in rows]),
              "ollama_total": metric_stats([r.get("total_ms") for r in rows]),
@@ -405,7 +466,8 @@ def gemma30_reports(directory, contract, state):
         lines.append("| "+" | ".join([row["case_id"],cell(row.get("error") or row.get("validation_error") or "нет")]+[ms(row.get(k)) for k in ("http_ms","total_ms","load_ms","prompt_eval_ms","eval_ms")]+[str(row.get(k)) for k in ("prompt_eval_count","eval_count")])+" |")
     lines += ["", "Смысловое качество оценивается вручную по comparison.md. Технически успешный JSON не доказывает точность пересказа.", ""]
     if state.get("orchestration_error"): lines += ["Ошибка организации прогона: "+state["orchestration_error"]]
-    (directory/"benchmark.md").write_text("\n".join(lines),encoding="utf8")
+    with measured(state.setdefault("report_stage_ms",{}),"benchmark_markdown_ms"):
+        (directory/"benchmark.md").write_text("\n".join(lines),encoding="utf8")
 
 def run_gemma30(args, manifest, tokenizer, contract, manifest_path):
     expected = [f"long-{i:02d}" for i in range(1,31)]
@@ -484,6 +546,7 @@ def main():
     p.add_argument("--stage", choices=["probes", "gemma-probe", "remaining"], default="probes")
     p.add_argument("--prepare", action="store_true", help="explicit pinned tokenizer downloads, no Ollama")
     p.add_argument("--run", action="store_true")
+    p.add_argument("--profile-gemma30",action="store_true",help="warm current/optimized comparison; concurrent2 only below 1500/hour")
     args = p.parse_args()
     if args.prepare and args.run:
         raise ValueError("prepare_and_run_are_separate")
@@ -491,17 +554,23 @@ def main():
         raise ValueError("dedicated_tokenizers_0_22_1_venv_required")
     rest=args.suite=="gemma-qwen-rest"
     gemma30=args.suite=="gemma30"
+    if args.profile_gemma30 and not gemma30:raise ValueError("profiling_requires_gemma30")
     fixed=rest or gemma30
     if fixed and (args.baseline or args.stage!="probes"):raise ValueError("fixed_suite_has_its_own_case_selection")
     if not fixed and args.baseline is None:raise ValueError("qwen_baseline_required")
     manifest_path=ROOT/"tools/gemma-qwen-models.json" if fixed else MANIFEST
     args.baseline_hash = None if fixed else sha(args.baseline.read_bytes())
     args.manifest_hash = sha(manifest_path.read_bytes())
-    contract = bridge(args.bridge.resolve(), {"Action": "prepare-gemma30" if gemma30 else "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if fixed else str(args.baseline.resolve())})
+    contract_request={"Action": "prepare-gemma30" if gemma30 else "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if fixed else str(args.baseline.resolve())}
+    args.contract_telemetry={}
+    contract = bridge(args.bridge.resolve(),contract_request,args.contract_telemetry) if args.profile_gemma30 else bridge(args.bridge.resolve(),contract_request)
     args.bridge = args.bridge.resolve()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     manifests = json.loads(manifest_path.read_bytes())
     if gemma30: manifests = {"gemma4": manifests["gemma4"]}
+    if args.profile_gemma30 and args.run:
+        from profile_gemma30 import run_comparison
+        return run_comparison(sys.modules[__name__],args,manifests["gemma4"],contract,manifest_path)
     tokenizers = {key: assets(key, m, args.prepare) for key, m in manifests.items()}
     if args.prepare:
         print("Pinned tokenizer assets verified; no generation.")
@@ -521,6 +590,8 @@ def main():
                                      input_tokens=count,required_tokens=count+m["reserve"],budget_ok=count+m["reserve"]<=8192,
                                      budget_status="candidate render; actual runtime render checked before generation"))
         plan={"stage":"plan","network":False,"cases":rows,"manifest_sha256":args.manifest_hash,"prompt_sha256":contract["prompt_sha256"],"schema_sha256":contract["schema_sha256"],"plan_ms":(time.monotonic()-plan_started)*1000}
+        if args.profile_gemma30:
+            plan["profiling"]={"current":30,"optimized":30,"concurrent2_conditional":30,"threshold_per_hour":1500}
         if fixed:(args.out_dir/"plan.json").write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding="utf8")
         print(json.dumps(plan,ensure_ascii=False))
         return int(any(not r["budget_ok"] for r in rows))
