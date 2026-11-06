@@ -119,6 +119,8 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 	execute := flags.Bool("run", false, "explicitly allow one generation per selected case; no retries")
 	out := flags.String("out", "", "new JSONL file; default stdout")
 	probeReport := flags.String("probe-report", "", "successful sr-06 JSONL required before 27B remaining --run")
+	inputDir := flags.String("input-dir", "", "external input JSON directory, 27B baseline only; default first-six")
+	reviewedFirst := flags.Bool("reviewed-first", false, "operator reviewed first six before external remaining --run")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || (*profile != diagnostic.Qwen35Profile && *profile != diagnostic.Qwen27Profile) || (*check && *execute) {
 		return errors.New("invalid_qwen35_arguments")
 	}
@@ -138,7 +140,26 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 		}
 	}
 	ids, err := selectCaseIDs(*mode, *selected)
-	if *profile == diagnostic.Qwen27Profile {
+	externalPaths := []string(nil)
+	if *inputDir != "" {
+		if *profile != diagnostic.Qwen27Profile || *mode != "baseline" {
+			return errors.New("external_inputs_require_qwen27_baseline")
+		}
+		explicitCase := false
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name == "case" {
+				explicitCase = true
+			}
+		})
+		if !explicitCase {
+			*selected = "first-six"
+		}
+		if *execute && *selected == "remaining" && !*reviewedFirst {
+			return errors.New("external_remaining_requires_reviewed_first")
+		}
+		ids, externalPaths, err = externalInputs(*inputDir, *selected)
+	}
+	if *profile == diagnostic.Qwen27Profile && *inputDir == "" {
 		if *mode != "baseline" || (*selected != "six" && *selected != "sr-06" && *selected != "remaining") || (*execute && *selected == "six") {
 			return errors.New("qwen27_requires_baseline_plan_six_or_probe_sr06_or_remaining")
 		}
@@ -154,18 +175,22 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 		return errors.New("qwen35_generation_limit_exceeded")
 	}
 	paths := []string{}
-	for _, id := range ids {
-		path, ok := casePaths[id]
-		if !ok {
-			return errors.New("unknown_qwen35_case")
+	if *inputDir != "" {
+		paths = externalPaths
+	} else {
+		for _, id := range ids {
+			path, ok := casePaths[id]
+			if !ok {
+				return errors.New("unknown_qwen35_case")
+			}
+			paths = append(paths, path)
 		}
-		paths = append(paths, path)
 	}
 	inputs, err := evaluation.LoadFiles(paths)
 	if err != nil {
 		return err
 	}
-	if *profile == diagnostic.Qwen27Profile && *execute && *selected == "remaining" {
+	if *profile == diagnostic.Qwen27Profile && *inputDir == "" && *execute && *selected == "remaining" {
 		if err := validate27Probe(*probeReport); err != nil {
 			return err
 		}
@@ -221,6 +246,9 @@ func runWithRunner(args []string, output io.Writer, newRunner func(string, strin
 			entry := report{Record: record, Profile: diagnostic.Qwen35Profile, CaseID: ids[i], AssessmentRole: "regression", SchemaVersion: diagnostic.SummarySchemaVersion, ProfileManifestHash: pinHash, ExpectedModelDigest: manifest.Digest, InputFileHash: input.Hash, OllamaSourceCommit: manifest.OllamaCommit, HFRevision: manifest.HFRevision, RecordedAt: time.Now().UTC()}
 			config, _ := diagnostic.Qwen35Configuration(modes[m])
 			entry.Profile = *profile
+			if *inputDir != "" {
+				entry.AssessmentRole = "synthetic_external"
+			}
 			if *profile == diagnostic.Qwen27Profile && record.Budget.Verified {
 				entry.RuntimeOllamaVersion = "0.40.15"
 			}
