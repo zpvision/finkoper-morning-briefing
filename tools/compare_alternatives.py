@@ -3,6 +3,7 @@ import argparse
 import atexit
 import datetime as dt
 import hashlib
+import html
 import importlib.metadata
 import json
 import os
@@ -28,6 +29,8 @@ def bridge(binary, request):
     return json.loads(p.stdout)
 
 def render(key, system, user, date):
+    if key == "qwen-v2":
+        return "<|im_start|>system\n"+system+"<|im_end|>\n<|im_start|>user\n"+user+"<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     if key == "gpt-oss":
         return ("<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\n"
                 "Knowledge cutoff: 2024-06\nCurrent date: " + date +
@@ -54,7 +57,7 @@ def call(base, path, payload=None, timeout=600):
     return result
 
 def assets(key, manifest, prepare=False):
-    directory = ROOT / "resources/tokenizer" / key
+    directory = ROOT / "resources/tokenizer" / ("qwen35-27b" if key=="qwen-v2" else key)
     directory.mkdir(parents=True, exist_ok=True)
     for name, pin in manifest["sources"].items():
         path = directory / name
@@ -69,6 +72,7 @@ def assets(key, manifest, prepare=False):
             raise ValueError("tokenizer_checksum_mismatch")
     from tokenizers import Tokenizer
     tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    if key=="qwen-v2":tokenizer.normalizer=None
     # Retain Gemma's explicit space -> U+2581 mapping; GPT has no normalizer.
     # No Unicode normalization is introduced. Generation text is never changed.
     tokenizer.no_padding()
@@ -87,7 +91,7 @@ def verify_show(base, manifest):
     metadata = {k: v for k, v in show["model_info"].items() if k.startswith("tokenizer.")}
     if sha(json.dumps(metadata, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode()) != manifest["tokenizer_metadata_sha256"]:
         raise ValueError("runtime_tokenizer_metadata_mismatch")
-    key = {"gpt-oss:20b":"gpt-oss", "gemma4:26b":"gemma4"}[manifest["model"]]
+    key = {"gpt-oss:20b":"gpt-oss", "gemma4:26b":"gemma4", "qwen3.5:27b-q4_K_M":"qwen35-27b"}[manifest["model"]]
     tokenizer = json.loads((ROOT/"resources/tokenizer"/key/"tokenizer.json").read_bytes())
     vocab = metadata["tokenizer.ggml.tokens"]
     if (not all(vocab[i] == text for text,i in tokenizer["model"]["vocab"].items()) or
@@ -149,10 +153,12 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
            "parameters": {k: v for k, v in payload.items() if k not in ("messages", "format")},
            "http_timeout_s": 600, "request_sha256": sha(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()),
            "baseline_report_sha256": args.baseline_hash, "manifest_sha256": args.manifest_hash,
-           "qwen_v2_reference": case["qwen_baseline"], "generation_attempts": 0, "result": None,
+           "qwen_v2_reference": case.get("qwen_baseline"), "generation_attempts": 0, "result": None,
            "final_content": None, "validation_error": None, "error": None,
            "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
            "comparison_note": "Models have different wrappers/tokenizers/think. GPT reserve=4096 includes reasoning; Gemma/Qwen reserve=1000. This does not isolate model or think alone."}
+    if getattr(args,"suite",None)=="gemma-qwen-rest":
+        row["comparison_note"]="Gemma/Qwen: same frozen v2 user/schema, think=false, baseline sampling and reserve=1000; native wrappers/tokenizers differ."
     fatal = False
     generated = False
     try:
@@ -229,11 +235,77 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
     row["processing_ms"] = (time.monotonic()-start)*1000
     return row, fatal
 
+def rest_reports(directory, cases, orchestration_error=None):
+    ids=[c["case_id"] for c in cases]
+    allrows={}
+    summary={"successes":{},"generations":{},"errors":[],"orchestration_error":orchestration_error}
+    lines=["# Gemma / Qwen v2 — syn-07…syn-24", "", "Смысловые оценки не вычислялись. Не запущенные строки явно отмечены.", "", "| Кейс | Gemma | Qwen v2 |", "|---|---|---|"]
+    for key in ("gemma4","qwen-v2"):
+        path=directory/(key+".jsonl")
+        rows=[json.loads(line) for line in path.read_text(encoding="utf8").splitlines()] if path.exists() else []
+        allrows[key]={r["case_id"]:r for r in rows}
+        summary["successes"][key]=sum(r.get("generation_attempts")==1 and not r.get("error") and not r.get("validation_error") for r in rows)
+        summary["generations"][key]=sum(r.get("generation_attempts",0) for r in rows)
+        for r in rows:
+            if r.get("error") or r.get("validation_error"):
+                summary["errors"].append({"model":key,"case_id":r["case_id"],"error":r.get("error"),"validation_error":r.get("validation_error")})
+    for id in ids:
+        cells=[]
+        for key in ("gemma4","qwen-v2"):
+            r=allrows[key].get(id)
+            if r is None:text="НЕ ЗАПУЩЕНО"
+            elif r.get("error") or r.get("validation_error"):text="ОШИБКА: "+str(r.get("error") or r.get("validation_error"))+"\n"+(r.get("final_content") or "")
+            else:text=r["result"]["summary"]
+            cells.append(html.escape(text).replace("|","\\|").replace("\n","<br>"))
+        lines.append("| "+id+" | "+" | ".join(cells)+" |")
+    (directory/"comparison.md").write_text("\n".join(lines)+"\n",encoding="utf8")
+    (directory/"summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf8")
+    return summary
+
+def run_rest(args,manifests,tokenizers,contract,manifest_path):
+    expected=[f"syn-{i:02d}" for i in range(7,25)]
+    if [c["case_id"] for c in contract["cases"]]!=expected or list(manifests)!=["gemma4","qwen-v2"]:
+        raise ValueError("rest_selection_mismatch")
+    plan=json.loads((args.out_dir/"plan.json").read_bytes())
+    expected_pairs=[(m["model"],c["case_id"],c["user_sha256"],c["input_file_sha256"]) for m in manifests.values() for c in contract["cases"]]
+    actual_pairs=[(r["model"],r["case_id"],r["user_sha256"],r.get("input_file_sha256")) for r in plan["cases"]]
+    if actual_pairs!=expected_pairs or plan.get("manifest_sha256")!=args.manifest_hash or plan.get("prompt_sha256")!=contract["prompt_sha256"] or plan.get("schema_sha256")!=contract["schema_sha256"] or not all(r.get("budget_ok") for r in plan["cases"]):
+        raise ValueError("successful_matching_36_case_plan_required")
+    lock=args.out_dir/".generation.lock"
+    fd=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
+    failed=False;orchestration_error=None
+    try:
+        if any((args.out_dir/(key+".jsonl")).exists() for key in manifests):
+            raise ValueError("outputs_exist_no_repeat")
+        (args.out_dir/"manifest.json").write_bytes(manifest_path.read_bytes())
+        for key in manifests:
+            with (args.out_dir/(key+".jsonl")).open("x",encoding="utf8"):pass
+        for key,m in manifests.items():
+            isolate(args.base_url)
+            try:
+                for case in contract["cases"]:
+                    row,fatal=evaluate(args,key,m,contract,case,tokenizers[key])
+                    with (args.out_dir/(key+".jsonl")).open("a",encoding="utf8") as file:
+                        file.write(json.dumps(row,ensure_ascii=False)+"\n");file.flush();os.fsync(file.fileno())
+                    rest_reports(args.out_dir,contract["cases"])
+                    print(key,case["case_id"],"ERROR "+row["error"] if row["error"] else "OK",flush=True)
+                    failed=failed or bool(row["error"])
+                    if fatal:return 1
+            finally:unload(args.base_url,m["model"])
+        return int(failed)
+    except BaseException as error:
+        orchestration_error=type(error).__name__
+        raise
+    finally:
+        rest_reports(args.out_dir,contract["cases"],orchestration_error)
+        lock.unlink(missing_ok=True)
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--bridge", type=Path, required=True)
     p.add_argument("--input-dir", required=True)
-    p.add_argument("--baseline", type=Path, required=True)
+    p.add_argument("--baseline", type=Path)
+    p.add_argument("--suite", choices=["first-six-alternatives","gemma-qwen-rest"], default="first-six-alternatives")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--base-url", default="http://127.0.0.1:11435", choices=["http://127.0.0.1:11435"])
     p.add_argument("--stage", choices=["probes", "gemma-probe", "remaining"], default="probes")
@@ -244,12 +316,16 @@ def main():
         raise ValueError("prepare_and_run_are_separate")
     if sys.prefix == sys.base_prefix or importlib.metadata.version("tokenizers") != "0.22.1":
         raise ValueError("dedicated_tokenizers_0_22_1_venv_required")
-    args.baseline_hash = sha(args.baseline.read_bytes())
-    args.manifest_hash = sha(MANIFEST.read_bytes())
-    contract = bridge(args.bridge.resolve(), {"Action": "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": str(args.baseline.resolve())})
+    rest=args.suite=="gemma-qwen-rest"
+    if rest and (args.baseline or args.stage!="probes"):raise ValueError("rest_suite_has_its_own_18_case_selection")
+    if not rest and args.baseline is None:raise ValueError("qwen_baseline_required")
+    manifest_path=ROOT/"tools/gemma-qwen-models.json" if rest else MANIFEST
+    args.baseline_hash = None if rest else sha(args.baseline.read_bytes())
+    args.manifest_hash = sha(manifest_path.read_bytes())
+    contract = bridge(args.bridge.resolve(), {"Action": "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if rest else str(args.baseline.resolve())})
     args.bridge = args.bridge.resolve()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    manifests = json.loads(MANIFEST.read_bytes())
+    manifests = json.loads(manifest_path.read_bytes())
     tokenizers = {key: assets(key, m, args.prepare) for key, m in manifests.items()}
     if args.prepare:
         print("Pinned tokenizer assets verified; no generation.")
@@ -260,13 +336,20 @@ def main():
             if args.stage == "gemma-probe" and key != "gemma4":
                 continue
             for case in contract["cases"]:
-                if (args.stage != "remaining") == (case["case_id"] == "syn-02"):
+                if rest or (args.stage != "remaining") == (case["case_id"] == "syn-02"):
+                    rendered=render(key,contract["prompt"],case["user"],dt.datetime.now(dt.timezone.utc).date().isoformat())
+                    count=len(tokenizers[key].encode(rendered,add_special_tokens=False).ids)
                     rows.append(dict(model=m["model"],case_id=case["case_id"],think=m["think"],num_ctx=8192,
                                      output_reserve=m["reserve"],prompt_sha256=contract["prompt_sha256"],
-                                     user_sha256=case["user_sha256"],generation_attempts=0,
-                                     budget_status="requires actual runtime render before generation"))
-        print(json.dumps({"stage":"plan","network":False,"cases":rows},ensure_ascii=False))
-        return 0
+                                     user_sha256=case["user_sha256"],input_file_sha256=case["input_file_sha256"],generation_attempts=0,
+                                     input_tokens=count,required_tokens=count+m["reserve"],budget_ok=count+m["reserve"]<=8192,
+                                     budget_status="candidate render; actual runtime render checked before generation"))
+        plan={"stage":"plan","network":False,"cases":rows,"manifest_sha256":args.manifest_hash,"prompt_sha256":contract["prompt_sha256"],"schema_sha256":contract["schema_sha256"]}
+        if rest:(args.out_dir/"plan.json").write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding="utf8")
+        print(json.dumps(plan,ensure_ascii=False))
+        return int(any(not r["budget_ok"] for r in rows))
+    if rest:
+        return run_rest(args,manifests,tokenizers,contract,manifest_path)
     lock = args.out_dir / ".generation.lock"
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)

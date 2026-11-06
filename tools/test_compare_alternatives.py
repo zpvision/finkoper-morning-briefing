@@ -17,6 +17,35 @@ class Tokens:
     def encode(self,text,add_special_tokens=False):return argparse.Namespace(ids=list(range(self.n)))
 
 class TransportTests(unittest.TestCase):
+    def test_rest_suite_36_and_partial_failure(self):
+        for scenario in ("ok","invalid","fatal"):
+            with self.subTest(scenario=scenario),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory)
+                cases=[dict(case_id=f"syn-{i:02d}",user="user"+str(i),user_sha256=str(i),input_file_sha256="file"+str(i),input={}) for i in range(7,25)]
+                contract=dict(prompt="system",prompt_version="v2",schema={},schema_version="summary-v1",prompt_sha256="s",schema_sha256="f",cases=cases)
+                args=argparse.Namespace(out_dir=root,manifest_hash="m",base_url="http://mock")
+                manifests={"gemma4":dict(model="gemma4:26b"),"qwen-v2":dict(model="qwen3.5:27b-q4_K_M")}
+                plan=dict(manifest_sha256="m",prompt_sha256="s",schema_sha256="f",cases=[dict(model=model["model"],case_id=c["case_id"],user_sha256=c["user_sha256"],input_file_sha256=c["input_file_sha256"],budget_ok=True) for model in manifests.values() for c in cases])
+                (root/"plan.json").write_text(json.dumps(plan))
+                manifest=root/"source.json";manifest.write_text("{}")
+                calls=[]
+                def evaluate(args,key,model,contract,case,tokenizer):
+                    calls.append((key,case["case_id"]))
+                    error="runtime_render_mismatch" if scenario=="fatal" else "invalid_summary" if scenario=="invalid" and len(calls)==1 else None
+                    row=dict(case_id=case["case_id"],generation_attempts=0 if scenario=="fatal" else 1,error=error,validation_error=error,result=None if error else dict(summary="mock"),final_content=None)
+                    return row,scenario=="fatal"
+                with patch.object(m,"isolate"),patch.object(m,"unload"),patch.object(m,"evaluate",side_effect=evaluate):
+                    self.assertEqual(m.run_rest(args,manifests,{k:Tokens(100) for k in manifests},contract,manifest),0 if scenario=="ok" else 1)
+                    self.assertEqual(len(calls),1 if scenario=="fatal" else 36)
+                    self.assertEqual(len(set(calls)),len(calls))
+                    self.assertTrue(all(int(id[-2:])>=7 for _,id in calls))
+                    self.assertTrue((root/"comparison.md").exists())
+                    summary=json.loads((root/"summary.json").read_bytes())
+                    self.assertEqual(summary["successes"]["qwen-v2"],0 if scenario=="fatal" else 18)
+                    # Existing reports prohibit a second generation pass.
+                    with self.assertRaisesRegex(ValueError,"outputs_exist_no_repeat"):m.run_rest(args,manifests,{k:Tokens(100) for k in manifests},contract,manifest)
+                    self.assertEqual(len(calls),1 if scenario=="fatal" else 36)
+
     def test_two_probes_then_ten_without_repeat(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); manifest=root/"manifest.json";baseline=root/"baseline.jsonl"
@@ -45,7 +74,7 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(len(calls),12)
 
     def test_completion_budget_and_private_reasoning(self):
-        for key,think,reserve in [("gpt-oss","low",4096),("gemma4",False,1000)]:
+        for key,think,reserve in [("gpt-oss","low",4096),("gemma4",False,1000),("qwen-v2",False,1000)]:
             for scenario in ["ok","length","invalid","count","renderer","overflow"]:
                 with self.subTest(key=key,scenario=scenario),tempfile.TemporaryDirectory() as directory:
                     args=argparse.Namespace(base_url="http://mock",bridge="unused",out_dir=Path(directory),baseline_hash="b",manifest_hash="m")

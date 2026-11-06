@@ -58,3 +58,46 @@ func TestFrozenContractAndBaselineIdentity(t *testing.T) {
 		t.Fatal("changed input accepted")
 	}
 }
+
+func TestRestContractOnly07To24WithoutReviewOrBaseline(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	fixture, err := os.ReadFile(filepath.Join(root, "evaluation/summary-regressions/inputs/sr-01.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for i := 7; i <= 24; i++ {
+		var fields map[string]any
+		json.Unmarshal(fixture, &fields)
+		fields["client_id"] = fmt.Sprintf("syn-%02d", i)
+		raw, _ := json.Marshal(fields)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("syn-%02d.json", i)), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "review.md"), []byte("PRIVATE_REVIEW"), 0600)
+	request, _ := json.Marshal(map[string]string{"Action": "prepare-rest", "InputDir": dir, "Baseline": "DO_NOT_READ"})
+	var output bytes.Buffer
+	if err := run(bytes.NewReader(request), &output); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Prompt string
+		Cases  []struct {
+			Case string `json:"case_id"`
+			User string
+		}
+	}
+	if json.Unmarshal(output.Bytes(), &result) != nil || len(result.Cases) != 18 || result.Prompt != diagnostic.SummaryPromptV2 || bytes.Contains(output.Bytes(), []byte("PRIVATE_REVIEW")) {
+		t.Fatal("selection/contract")
+	}
+	for i, c := range result.Cases {
+		if c.Case != fmt.Sprintf("syn-%02d", i+7) {
+			t.Fatal("case order")
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "syn-24.json"), []byte("invalid"), 0600)
+	if run(bytes.NewReader(request), &bytes.Buffer{}) == nil {
+		t.Fatal("invalid input accepted")
+	}
+}

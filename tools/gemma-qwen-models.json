@@ -1,0 +1,96 @@
+{
+  "gemma4": {
+    "repo": "google/gemma-4-26B-A4B-it",
+    "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+    "sources": {
+      "tokenizer.json": {
+        "url": "https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/tokenizer.json",
+        "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+        "bytes": 32169626
+      },
+      "tokenizer_config.json": {
+        "url": "https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/tokenizer_config.json",
+        "sha256": "9f4fec4b1dc6ecddf8f4a92e9caea5971c0e67d81309f3f9066a2bee8c362633",
+        "bytes": 3082
+      }
+    },
+    "model": "gemma4:26b",
+    "digest": "001e5dafc3c77684c2307ebc6ab8e336e10c9b18eca52acf547d72fc83c3ca8c",
+    "think": false,
+    "reserve": 1000,
+    "ollama_version": "0.40.15",
+    "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+    "tokenizer_metadata_sha256": "b3b193fd49138f583464a37971e12678b46d074d2d7bec1685b2dbb73035cc50",
+    "model_default_parameters": "draft_num_predict              3\ntemperature                    1\ntop_k                          64\ntop_p                          0.95",
+    "normalizer": {
+      "type": "Replace",
+      "pattern": {
+        "String": " "
+      },
+      "content": "\u2581"
+    },
+    "effective_renderer": "gemma4-large",
+    "renderer_sources": {
+      "model/renderers/gemma4.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/model/renderers/gemma4.go",
+        "sha256": "5d6b33862fdbf14f1c6ae64d927eacac8e19dd9cb5398a23f66f6740b1bdf72d"
+      },
+      "server/renderer_resolution.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/server/renderer_resolution.go",
+        "sha256": "d86864240d854d3955f7b575fbb0a7b34f27abafa5c2daa98083538cf9f6c789"
+      },
+      "model/renderers/renderer.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/model/renderers/renderer.go",
+        "sha256": "93cf8038959807f620af5ca8ab3f478e09397e1339d41e65686ecd2b151bef65"
+      },
+      "llm/llama_server.go": {
+        "url": "https://raw.githubusercontent.com/ollama/ollama/02480ca2a47153e1f9c31cbe1e05536da97ce1ba/llm/llama_server.go",
+        "sha256": "f2510e68f4fce8ec75fc49710306baec2dfb879b061cd2b4822a14bde6e68387"
+      }
+    }
+  },
+  "qwen-v2": {
+    "profile": "qwen35-27b-summary-v2-v1",
+    "model": "qwen3.5:27b-q4_K_M",
+    "model_digest": "64ae5b1d651fb2709d5928ccb8dcfb4bb2cc9c2c8001ac34497e36a6cf905b59",
+    "ollama_version": "0.40.15",
+    "ollama_commit": "d919272e53593d1d55d40e1180eaa06dfbede3ac",
+    "hf_repository": "Qwen/Qwen3.5-9B",
+    "hf_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "llamacpp_commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+    "renderer": "qwen3.5",
+    "parser": "qwen3.5",
+    "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+    "tokenizer_metadata_sha256": "b90f312538ac34164b6a3455061e481c65c90c07af254f9dbf21f407f76cca36",
+    "architecture": "qwen35",
+    "pre_tokenizer": "qwen35",
+    "vocabulary_entries": 248320,
+    "merges": 247587,
+    "normalization": "none (GGUF BPE path; official HF NFC disabled in memory)",
+    "budget_method": "qwen35_tokenizers_pinned_renderer_no_normalization",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": 0,
+      "presence_penalty": 1.5,
+      "repeat_penalty": 1
+    },
+    "sources": {
+      "tokenizer.json": {
+        "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/tokenizer.json",
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "bytes": 12807982
+      },
+      "tokenizer_config.json": {
+        "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/tokenizer_config.json",
+        "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "bytes": 16710
+      }
+    },
+    "renderer_reference_note": "9B pinned renderer is a candidate only for 0.40.15; exact runtime render-only and prompt_eval_count are required. No claim that the installed binary matches the reference source commit.",
+    "digest": "64ae5b1d651fb2709d5928ccb8dcfb4bb2cc9c2c8001ac34497e36a6cf905b59",
+    "think": false,
+    "reserve": 1000
+  }
+}
