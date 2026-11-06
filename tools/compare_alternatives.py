@@ -6,9 +6,11 @@ import hashlib
 import html
 import importlib.metadata
 import json
+import math
 import os
 from pathlib import Path
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -156,15 +158,30 @@ def evaluate(args, key, manifest, contract, case, tokenizer):
            "qwen_v2_reference": case.get("qwen_baseline"), "generation_attempts": 0, "result": None,
            "final_content": None, "validation_error": None, "error": None,
            "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+           "ollama_version": manifest.get("ollama_version"),
            "comparison_note": "Models have different wrappers/tokenizers/think. GPT reserve=4096 includes reasoning; Gemma/Qwen reserve=1000. This does not isolate model or think alone."}
     if getattr(args,"suite",None)=="gemma-qwen-rest":
         row["comparison_note"]="Gemma/Qwen: same frozen v2 user/schema, think=false, baseline sampling and reserve=1000; native wrappers/tokenizers differ."
+    if getattr(args,"suite",None)=="gemma30":
+        row["comparison_note"]="30 synthetic mail inputs, frozen v2/schema/baseline sampling; technical checks do not assess meaning."
     fatal = False
     generated = False
     try:
+        if getattr(args, "suite", None) == "gemma30":
+            row["resident_before_case"] = call(args.base_url, "/api/ps")
         t = time.monotonic()
         row["model_default_parameters"] = verify_show(args.base_url, manifest)
+        debug_start = time.monotonic()
         debug = call(args.base_url, "/api/chat", dict(payload, _debug_render_only=True))
+        row["render_only_http_ms"] = (time.monotonic()-debug_start)*1000
+        # Render-only may load the runner. Preserve its timing separately from generation.
+        # Missing server metrics remain null; never label wall time as pure load time.
+        row["render_only_ollama_ms"] = {
+            name: None if debug.get(name+"_duration") is None else debug[name+"_duration"]/1000000
+            for name in ("total", "load", "prompt_eval", "eval")}
+        row["render_only_done_reason"] = debug.get("done_reason")
+        if getattr(args, "suite", None) == "gemma30":
+            row["resident_after_render_only"] = call(args.base_url, "/api/ps")
         rendered = debug.get("_debug_info", {}).get("rendered_template")
         if not isinstance(rendered, str):
             raise ValueError("render_only_missing_rendered_template")
@@ -300,12 +317,168 @@ def run_rest(args,manifests,tokenizers,contract,manifest_path):
         rest_reports(args.out_dir,contract["cases"],orchestration_error)
         lock.unlink(missing_ok=True)
 
+def metric_stats(values):
+    values = sorted(v for v in values if isinstance(v, (int, float)))
+    return {"count": len(values), "sum_ms": sum(values) if values else None,
+            "median_ms": statistics.median(values) if values else None,
+            "p95_ms": values[math.ceil(.95*len(values))-1] if values else None}
+
+def gemma30_reports(directory, contract, state):
+    path = directory/"gemma4.jsonl"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf8").splitlines()] if path.exists() else []
+    by_id = {r["case_id"]: r for r in rows}
+    succeeded = [r for r in rows if r.get("generation_attempts")==1 and not r.get("error") and not r.get("validation_error")]
+    elapsed = state.get("batch_ms", 0)
+    complete = state.get("finished", False) and len(rows)==30 and len(succeeded)==30 and not state.get("orchestration_error")
+    ms = lambda value: "нет метрики" if value is None else f"{value:.3f}"
+    cell = lambda text: html.escape(str(text)).replace("|", "\\|").replace("\n", "<br>")
+    lines = ["# Gemma — исходные письма и пересказ", "", "Синтетические данные. Автоматические проверки подтверждают структуру, не смысловую точность. Разметка не читалась и модели не передавалась.", ""]
+    for case in contract["cases"]:
+        row = by_id.get(case["case_id"])
+        letters = []
+        for field, label in (("context_messages", "Предыстория"), ("messages", "Период")):
+            for message in case["input"].get(field) or []:
+                letters.append(f"**{label}; {message['id']}; {message['sent_at']}; {message['sender_role']}; {message['channel']}**<br>"+cell(message["text"]))
+        if row is None:
+            answer = "НЕ ЗАПУЩЕНО"
+        elif row.get("error") or row.get("validation_error"):
+            answer = cell("ОШИБКА: "+str(row.get("error") or row.get("validation_error"))+"\n"+(row.get("final_content") or ""))
+        else:
+            answer = cell(row["result"]["summary"])+"<br><br>Источники: "+cell(", ".join(row["result"]["source_message_ids"]))
+        lines += ["## "+case["case_id"], "", "| Исходные письма | Ответ Gemma |", "|---|---|", "| "+"<br><br>".join(letters)+" | "+answer+" |", ""]
+    (directory/"comparison.md").write_text("\n".join(lines), encoding="utf8")
+    stats = {"case_until_fsync": metric_stats([r["case_ms"] for r in state.get("timings", [])]),
+             "generation_http": metric_stats([r.get("http_ms") for r in rows]),
+             "ollama_total": metric_stats([r.get("total_ms") for r in rows]),
+             "ollama_load": metric_stats([r.get("load_ms") for r in rows]),
+             "ollama_prompt_eval": metric_stats([r.get("prompt_eval_ms") for r in rows]),
+             "ollama_generation": metric_stats([r.get("eval_ms") for r in rows]),
+             "render_http": metric_stats([r.get("render_only_http_ms") for r in rows]),
+             "render_load": metric_stats([r.get("render_only_ollama_ms", {}).get("load") for r in rows])}
+    success_rate = len(succeeded)*3600000/elapsed if elapsed else None
+    state.update(successes=len(succeeded), generations=sum(r.get("generation_attempts", 0) for r in rows),
+                 complete=complete, stats=stats, successful_summaries_per_hour=success_rate,
+                 errors=[{"case_id":r["case_id"],"error":r.get("error"),"validation_error":r.get("validation_error")} for r in rows if r.get("error") or r.get("validation_error")])
+    warm_rows = rows[1:] if state.get("first_case_initially_cold") else rows
+    warm_windows = state.get("timings", [])[1:] if state.get("first_case_initially_cold") else state.get("timings", [])
+    warm = complete and bool(warm_rows) and all(any(m.get("name")==state["model"] for m in r.get("resident_before_case", {}).get("models", [])) for r in warm_rows)
+    warm_ms = warm_windows[-1]["saved_offset_ms"]-warm_windows[0]["started_offset_ms"] if warm and warm_windows else None
+    state["warm_ms"] = warm_ms
+    state["warm_cases"] = len(warm_rows) if warm else 0
+    state["warm_successful_summaries_per_hour"] = len(warm_rows)*3600000/warm_ms if warm_ms else None
+    (directory/"batch-state.json").write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding="utf8")
+    lines = ["# Gemma 4 26B — фактический последовательный benchmark", "",
+             "**"+("Завершено 30/30" if complete else "ЧАСТИЧНЫЙ ПРОГОН — не время всех 30")+"**", "",
+             f"Модель: `{state['model']}`; digest `{state['digest']}`; Ollama `{state['ollama_version']}`.",
+             "Промпт `diagnostic-summary-v2`, схема `summary-v1`, think=false. Temperature=0.7, top_p=0.8, top_k=20, min_p=0, presence_penalty=1.5, repeat_penalty=1; context=8192, reserve/num_predict=1000, HTTP timeout=600s. По одному запросу, без повторов.", "",
+             f"Начатых генераций: **{state['generations']}**, технически успешных: **{len(succeeded)}**, записей: {len(rows)}/30.",
+             f"План без сети: **{ms(state.get('plan_ms'))} ms** (main → проверка входов/ресурсов/CPU-подсчёт; отдельно от реальной партии).",
+             f"Полное время партии: **{elapsed/1000:.3f} s**; успешных обзоров в час: **{ms(success_rate)}**.",
+             "Часы: time.monotonic(). От начала первого кейса до завершения flush+fsync последней JSONL-строки; включены проверки, загрузка, ожидание, tokenizers, HTTP/туннель, Go-валидация, запись, межкейсные обновления отчётов. Финальное построение Markdown вне этого интервала. Начальное /api/ps и план вне партии. Загрузка из времени не вычиталась.", "",
+             "## Холодное начало и длительности", "",
+             "Начальное состояние `/api/ps` сохранено в `batch-state.json`. Первая модель "+("отсутствовала в /api/ps — холодное начало." if state.get("first_case_initially_cold") else "была резидентна — холодная загрузка не измерена."),
+             "Render-only может загрузить runner до генерации. Его HTTP-время и доступные server load metrics записаны отдельно; отсутствие load_duration не заменяется нулём и HTTP render-only не объявляется чистой загрузкой. `load_ms` ниже относится к генерационному ответу, это не автоматически вся холодная загрузка.", "",
+             "| Метрика | Измерений | Сумма ms | Медиана ms | p95 ms |", "|---|---:|---:|---:|---:|"]
+    for name, values in stats.items():
+        lines.append(f"| {name} | {values['count']} | {ms(values['sum_ms'])} | {ms(values['median_ms'])} | {ms(values['p95_ms'])} |")
+    if rows:
+        first = rows[0]
+        lines += ["", f"Первый кейс `{first['case_id']}`: render-only HTTP={ms(first.get('render_only_http_ms'))} ms; render-only load={ms(first.get('render_only_ollama_ms',{}).get('load'))} ms; generation HTTP={ms(first.get('http_ms'))} ms; generation load={ms(first.get('load_ms'))} ms; prompt_eval={ms(first.get('prompt_eval_ms'))} ms; generation={ms(first.get('eval_ms'))} ms."]
+    if state.get("cold_load"):
+        cold = state["cold_load"]
+        lines += ["", f"Отдельная холодная загрузка внутри первого кейса: **{ms(cold['http_ms'])} ms HTTP**, server load_duration={ms(cold['ollama_ms']['load'])} ms, total_duration={ms(cold['ollama_ms']['total'])} ms; done_reason={cold['done_reason']}, eval_count={cold['eval_count']}. Это empty-chat load без генерации и без предварительного вычитания из партии. Если сервер не сообщает load_duration, HTTP отражает операцию загрузки целиком, включая туннель и ожидание, а не чистое время GPU.", "Документированный empty-chat load: [Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md#load-a-model-1). Загрузка выполняется только если начальный /api/ps не содержал Gemma; модель искусственно не выгружается."]
+    measured_http = sum(r.get("http_ms",0)+r.get("render_only_http_ms",0) for r in rows)+state.get("cold_load",{}).get("http_ms",0)
+    if rows and stats["generation_http"]["count"]==len(rows) and stats["render_http"]["count"]==len(rows):
+        lines += ["", f"Остальное клиентское время партии: **{(elapsed-measured_http)/1000:.3f} s** (полная партия минус неперекрывающиеся HTTP генераций, render-only и отдельной загрузки). Это включает передачи/проверки метаданных, tokenizers, Go-валидацию и запись; серверные load/prompt_eval/eval уже входят в HTTP и повторно не прибавляются. Поэтому обзоры/час здесь — производительность всего диагностического клиента, а не максимальная скорость GPU или рабочего API."]
+    lines += ["", "p95 — nearest rank: сортировка и элемент ceil(0.95 × N). Метрики Ollama — серверные наносекунды / 1e6; недоступные значения явно отсутствуют. Клиентский HTTP и серверные длительности перекрываются, их нельзя суммировать. GPU — reported size_vram==size через /api/ps, не независимый аудит размещения MoE-экспертов.", "", "## Прогноз одной RTX 4090", ""]
+    if state.get("failed_before_first_result"):
+        lines += ["Сбой до первой строки JSONL: показанное время измерено до ошибки, а не до несуществующего сохранённого ответа.", ""]
+    if complete:
+        lines += [f"Вся партия: {len(succeeded)} успешных / {elapsed/1000:.3f} s. "+(f"Тёплый участок: {len(warm_rows)} / {warm_ms/1000:.3f} s, {state['warm_successful_summaries_per_hour']:.3f} обзоров/час." if warm_ms else "Непрерывный тёплый участок не подтверждён."), "", "Тёплый участок определяется наличием Gemma в /api/ps перед кейсами; внутренние перезагрузки runner этим не исключены, их затраты из времени не вычитаются.", "", "| Клиентов | По всей партии, часы | По тёплому участку, часы |", "|---:|---:|---:|"]
+        for n in (1000,3000,5000):
+            lines.append(f"| {n} | {n*elapsed/len(succeeded)/3600000:.3f} | "+(f"{n*warm_ms/len(warm_rows)/3600000:.3f}" if warm_ms else "нет оценки")+" |")
+        lines += ["", "Линейная оценка: N × (измеренное время / число успешных) / 3 600 000. Вариант всей партии сохраняет долю холодного старта 1/30; тёплый вариант исключает первый кейс только при подтверждённой резидентности остальных. Это ориентиры для такого же объёма и длины ответов, одной GPU, одного последовательного клиента и прежнего туннеля/проверок; не прогноз для произвольной реальной почты. Загрузка, другие пользователи GPU и распределение длин могут изменить время. Параллельное ускорение не экстраполируется."]
+    else:
+        lines += ["Прогноз для 1000/3000/5000 клиентов не рассчитывается: нет 30 успешных результатов."]
+    lines += ["", "## По кейсам", "", "| Кейс | Ошибка | Client HTTP ms | Ollama ms | Load ms | Input eval ms | Generation ms | Input tokens | Output tokens |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for row in rows:
+        lines.append("| "+" | ".join([row["case_id"],cell(row.get("error") or row.get("validation_error") or "нет")]+[ms(row.get(k)) for k in ("http_ms","total_ms","load_ms","prompt_eval_ms","eval_ms")]+[str(row.get(k)) for k in ("prompt_eval_count","eval_count")])+" |")
+    lines += ["", "Смысловое качество оценивается вручную по comparison.md. Технически успешный JSON не доказывает точность пересказа.", ""]
+    if state.get("orchestration_error"): lines += ["Ошибка организации прогона: "+state["orchestration_error"]]
+    (directory/"benchmark.md").write_text("\n".join(lines),encoding="utf8")
+
+def run_gemma30(args, manifest, tokenizer, contract, manifest_path):
+    expected = [f"long-{i:02d}" for i in range(1,31)]
+    if [c["case_id"] for c in contract["cases"]] != expected:
+        raise ValueError("gemma30_selection_mismatch")
+    plan = json.loads((args.out_dir/"plan.json").read_bytes())
+    pairs = [(r["case_id"],r["user_sha256"],r["input_file_sha256"]) for r in plan["cases"]]
+    if pairs != [(c["case_id"],c["user_sha256"],c["input_file_sha256"]) for c in contract["cases"]] or plan.get("manifest_sha256")!=args.manifest_hash or plan.get("prompt_sha256")!=contract["prompt_sha256"] or plan.get("schema_sha256")!=contract["schema_sha256"] or not all(r.get("budget_ok") and r["model"]==manifest["model"] for r in plan["cases"]):
+        raise ValueError("successful_matching_30_case_plan_required")
+    lock = args.out_dir/".generation.lock"
+    fd = os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600); os.close(fd)
+    state = None
+    batch_start = None
+    try:
+        path = args.out_dir/"gemma4.jsonl"
+        if path.exists(): raise ValueError("outputs_exist_no_repeat")
+        initial = call(args.base_url,"/api/ps")
+        state = dict(model=manifest["model"],digest=manifest["digest"],ollama_version=manifest["ollama_version"],
+                     prompt_sha256=contract["prompt_sha256"],schema_sha256=contract["schema_sha256"],
+                     plan_ms=plan.get("plan_ms"),initial_ps=initial,
+                     first_case_initially_cold=not any(m.get("name")==manifest["model"] for m in initial.get("models",[])),
+                     timings=[],batch_ms=0,finished=False,orchestration_error=None)
+        if any(m.get("name")!=manifest["model"] for m in initial.get("models",[])):
+            raise ValueError("other_model_resident_no_service_changes")
+        (args.out_dir/"manifest.json").write_bytes(manifest_path.read_bytes())
+        with path.open("x",encoding="utf8"): pass
+        gemma30_reports(args.out_dir,contract,state)
+        batch_start = time.monotonic()
+        for index, case in enumerate(contract["cases"],1):
+            started = time.monotonic()
+            if index==1:
+                batch_start=started
+            if index==1 and state["first_case_initially_cold"]:
+                verify_show(args.base_url, manifest)
+                load_start=time.monotonic()
+                loaded=call(args.base_url,"/api/chat",dict(model=manifest["model"],messages=[],stream=False,think=False,keep_alive="30m",
+                            options=dict(temperature=.7,top_p=.8,top_k=20,min_p=0,presence_penalty=1.5,repeat_penalty=1,num_ctx=8192,num_predict=1000)))
+                state["cold_load"]=dict(http_ms=(time.monotonic()-load_start)*1000,done_reason=loaded.get("done_reason"),eval_count=loaded.get("eval_count"),
+                                        ollama_ms={name:None if loaded.get(name+"_duration") is None else loaded[name+"_duration"]/1000000 for name in ("total","load","prompt_eval","eval")})
+                if loaded.get("done") is not True or loaded.get("done_reason")!="load" or loaded.get("eval_count",0)!=0 or loaded.get("message",{}).get("content") or loaded.get("message",{}).get("thinking"):
+                    raise ValueError("empty_chat_load_not_confirmed_no_generation_retry")
+            row, fatal = evaluate(args,"gemma4",manifest,contract,case,tokenizer)
+            row["case_order"] = index
+            row["started_batch_offset_ms"] = (started-batch_start)*1000
+            with path.open("a",encoding="utf8") as file:
+                file.write(json.dumps(row,ensure_ascii=False)+"\n"); file.flush(); os.fsync(file.fileno())
+            saved = time.monotonic()
+            state["batch_ms"] = (saved-batch_start)*1000
+            state["timings"].append(dict(case_id=case["case_id"],started_offset_ms=(started-batch_start)*1000,
+                                        saved_offset_ms=state["batch_ms"],case_ms=(saved-started)*1000))
+            state["finished"] = index==30
+            gemma30_reports(args.out_dir,contract,state)
+            print("gemma4",case["case_id"],"ERROR "+row["error"] if row["error"] else "OK",flush=True)
+            if fatal: return 1
+        return int(bool(state.get("errors")))
+    except BaseException as error:
+        if state is not None:
+            state["orchestration_error"] = str(error) if type(error) is ValueError else type(error).__name__
+            if batch_start is not None and not state["timings"]:
+                state["batch_ms"] = (time.monotonic()-batch_start)*1000
+                state["failed_before_first_result"] = True
+        raise
+    finally:
+        if state is not None: gemma30_reports(args.out_dir,contract,state)
+        lock.unlink(missing_ok=True)
+
 def main():
+    plan_started = time.monotonic()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--bridge", type=Path, required=True)
     p.add_argument("--input-dir", required=True)
     p.add_argument("--baseline", type=Path)
-    p.add_argument("--suite", choices=["first-six-alternatives","gemma-qwen-rest"], default="first-six-alternatives")
+    p.add_argument("--suite", choices=["first-six-alternatives","gemma-qwen-rest","gemma30"], default="first-six-alternatives")
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--base-url", default="http://127.0.0.1:11435", choices=["http://127.0.0.1:11435"])
     p.add_argument("--stage", choices=["probes", "gemma-probe", "remaining"], default="probes")
@@ -317,15 +490,18 @@ def main():
     if sys.prefix == sys.base_prefix or importlib.metadata.version("tokenizers") != "0.22.1":
         raise ValueError("dedicated_tokenizers_0_22_1_venv_required")
     rest=args.suite=="gemma-qwen-rest"
-    if rest and (args.baseline or args.stage!="probes"):raise ValueError("rest_suite_has_its_own_18_case_selection")
-    if not rest and args.baseline is None:raise ValueError("qwen_baseline_required")
-    manifest_path=ROOT/"tools/gemma-qwen-models.json" if rest else MANIFEST
-    args.baseline_hash = None if rest else sha(args.baseline.read_bytes())
+    gemma30=args.suite=="gemma30"
+    fixed=rest or gemma30
+    if fixed and (args.baseline or args.stage!="probes"):raise ValueError("fixed_suite_has_its_own_case_selection")
+    if not fixed and args.baseline is None:raise ValueError("qwen_baseline_required")
+    manifest_path=ROOT/"tools/gemma-qwen-models.json" if fixed else MANIFEST
+    args.baseline_hash = None if fixed else sha(args.baseline.read_bytes())
     args.manifest_hash = sha(manifest_path.read_bytes())
-    contract = bridge(args.bridge.resolve(), {"Action": "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if rest else str(args.baseline.resolve())})
+    contract = bridge(args.bridge.resolve(), {"Action": "prepare-gemma30" if gemma30 else "prepare-rest" if rest else "prepare", "InputDir": str(Path(args.input_dir).resolve()), "Baseline": "" if fixed else str(args.baseline.resolve())})
     args.bridge = args.bridge.resolve()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     manifests = json.loads(manifest_path.read_bytes())
+    if gemma30: manifests = {"gemma4": manifests["gemma4"]}
     tokenizers = {key: assets(key, m, args.prepare) for key, m in manifests.items()}
     if args.prepare:
         print("Pinned tokenizer assets verified; no generation.")
@@ -336,7 +512,7 @@ def main():
             if args.stage == "gemma-probe" and key != "gemma4":
                 continue
             for case in contract["cases"]:
-                if rest or (args.stage != "remaining") == (case["case_id"] == "syn-02"):
+                if fixed or (args.stage != "remaining") == (case["case_id"] == "syn-02"):
                     rendered=render(key,contract["prompt"],case["user"],dt.datetime.now(dt.timezone.utc).date().isoformat())
                     count=len(tokenizers[key].encode(rendered,add_special_tokens=False).ids)
                     rows.append(dict(model=m["model"],case_id=case["case_id"],think=m["think"],num_ctx=8192,
@@ -344,12 +520,14 @@ def main():
                                      user_sha256=case["user_sha256"],input_file_sha256=case["input_file_sha256"],generation_attempts=0,
                                      input_tokens=count,required_tokens=count+m["reserve"],budget_ok=count+m["reserve"]<=8192,
                                      budget_status="candidate render; actual runtime render checked before generation"))
-        plan={"stage":"plan","network":False,"cases":rows,"manifest_sha256":args.manifest_hash,"prompt_sha256":contract["prompt_sha256"],"schema_sha256":contract["schema_sha256"]}
-        if rest:(args.out_dir/"plan.json").write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding="utf8")
+        plan={"stage":"plan","network":False,"cases":rows,"manifest_sha256":args.manifest_hash,"prompt_sha256":contract["prompt_sha256"],"schema_sha256":contract["schema_sha256"],"plan_ms":(time.monotonic()-plan_started)*1000}
+        if fixed:(args.out_dir/"plan.json").write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding="utf8")
         print(json.dumps(plan,ensure_ascii=False))
         return int(any(not r["budget_ok"] for r in rows))
     if rest:
         return run_rest(args,manifests,tokenizers,contract,manifest_path)
+    if gemma30:
+        return run_gemma30(args,manifests["gemma4"],tokenizers["gemma4"],contract,manifest_path)
     lock = args.out_dir / ".generation.lock"
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)

@@ -101,3 +101,41 @@ func TestRestContractOnly07To24WithoutReviewOrBaseline(t *testing.T) {
 		t.Fatal("invalid input accepted")
 	}
 }
+
+func TestGemma30FrozenContract(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	fixture, err := os.ReadFile(filepath.Join(root, "evaluation/summary-regressions/inputs/sr-01.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for i := 1; i <= 30; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("long-%02d.json", i)), fixture, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "review.md"), []byte("PRIVATE_REVIEW"), 0600)
+	request, _ := json.Marshal(map[string]string{"Action": "prepare-gemma30", "InputDir": dir, "Baseline": "DO_NOT_READ"})
+	var output bytes.Buffer
+	if err := run(bytes.NewReader(request), &output); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Prompt string
+		Cases  []struct {
+			Case string `json:"case_id"`
+		}
+	}
+	if json.Unmarshal(output.Bytes(), &result) != nil || len(result.Cases) != 30 || diagnostic.Hash(result.Prompt) != "8cc6dc4d3fad8eba8da327ecf9837aaa0213c6f978678e65c4ad105464d8ff31" || bytes.Contains(output.Bytes(), []byte("PRIVATE_REVIEW")) {
+		t.Fatal("selection/frozen contract/annotations")
+	}
+	for i, c := range result.Cases {
+		if c.Case != fmt.Sprintf("long-%02d", i+1) {
+			t.Fatal("case order")
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "long-30.json"), []byte("invalid"), 0600)
+	if run(bytes.NewReader(request), &bytes.Buffer{}) == nil {
+		t.Fatal("invalid input accepted")
+	}
+}

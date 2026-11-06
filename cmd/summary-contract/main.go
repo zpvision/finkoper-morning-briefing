@@ -46,22 +46,25 @@ func run(input io.Reader, output io.Writer) error {
 		}
 		return json.NewEncoder(output).Encode(result)
 	}
-	if req.Action != "prepare" && req.Action != "prepare-rest" {
+	if req.Action != "prepare" && req.Action != "prepare-rest" && req.Action != "prepare-gemma30" {
 		return fmt.Errorf("unknown_contract_action")
 	}
 	paths := []string{}
-	first, last := 1, 6
+	first, last, prefix := 1, 6, "syn"
 	if req.Action == "prepare-rest" {
 		first, last = 7, 24
 	}
+	if req.Action == "prepare-gemma30" {
+		first, last, prefix = 1, 30, "long"
+	}
 	for i := first; i <= last; i++ {
-		paths = append(paths, filepath.Join(req.InputDir, fmt.Sprintf("syn-%02d.json", i)))
+		paths = append(paths, filepath.Join(req.InputDir, fmt.Sprintf("%s-%02d.json", prefix, i)))
 	}
 	inputs, err := evaluation.LoadFiles(paths)
 	if err != nil {
 		return err
 	}
-	if req.Action == "prepare-rest" {
+	if req.Action == "prepare-rest" || req.Action == "prepare-gemma30" {
 		contracts := []map[string]any{}
 		for i, input := range inputs {
 			_, user := briefing.PromptInput(input.Input)
@@ -69,7 +72,7 @@ func run(input io.Reader, output io.Writer) error {
 			if err != nil {
 				return err
 			}
-			contracts = append(contracts, map[string]any{"case_id": fmt.Sprintf("syn-%02d", i+7), "input": json.RawMessage(raw), "user": user, "input_file_sha256": input.Hash, "user_sha256": diagnostic.Hash(user)})
+			contracts = append(contracts, map[string]any{"case_id": fmt.Sprintf("%s-%02d", prefix, i+first), "input": json.RawMessage(raw), "user": user, "input_file_sha256": input.Hash, "user_sha256": diagnostic.Hash(user)})
 		}
 		return json.NewEncoder(output).Encode(map[string]any{"prompt": diagnostic.SummaryPromptV2, "prompt_version": diagnostic.SummaryPromptVersionV2, "prompt_sha256": diagnostic.Hash(diagnostic.SummaryPromptV2), "schema": json.RawMessage(diagnostic.SummarySchema), "schema_version": diagnostic.SummarySchemaVersion, "schema_sha256": diagnostic.Hash(diagnostic.SummarySchema), "cases": contracts})
 	}
